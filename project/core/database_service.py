@@ -1,7 +1,7 @@
 from abc import ABC
 from typing import Generic
 
-from .db_repository import ModelRepository, ModelT
+from .model_repository import ModelRepository, ModelT
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

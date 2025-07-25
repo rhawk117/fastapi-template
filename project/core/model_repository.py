@@ -5,15 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.sql.selectable import Select
 
-ModelT = TypeVar("ModelT")
+ModelT = TypeVar('ModelT')
 
 
 class ModelRepository(Generic[ModelT]):
-    """Provides methods for common CRUD operations on database models
+    """
+    Provides methods for common CRUD operations on database models
     and is the foundation for all services that interact with the database.
-    Properties:
-        model {ModelT} -- the SQLAlchemy model class for the repository
-        db {AsyncSession} -- the database session to use for queries
     """
 
     def __init__(self, model: type[ModelT], db: AsyncSession) -> None:
@@ -62,9 +60,9 @@ class ModelRepository(Generic[ModelT]):
         models = result.scalars().all()
         return list(models) if models else []
 
-    async def create(self, obj_in: dict) -> ModelT:
+    async def create(self, obj_in: dict, *, refresh: bool = True) -> ModelT:
         db_model = self.model(**obj_in)
-        await self.save(db_model, refresh=True)
+        await self.save(db_model, refresh=refresh)
         return db_model
 
     async def update(self, db_model: ModelT, obj_in: dict) -> ModelT:

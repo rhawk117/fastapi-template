@@ -1,19 +1,11 @@
 from datetime import datetime
-
 from typing import Any, Self, TypeVar
+
 from pydantic import BaseModel, ConfigDict
 
 
 def to_camel(string: str) -> str:
-    """used in the custom base model as the "alias generator"
-    meaning, the model will accept a camel case field name and
-    also the python snake case field name
-    Arguments:
-        string {str} -- the string to convert to camel case
-    Returns:
-        str -- the string in camel case
-    """
-    words = string.split("_")
+    words = string.split('_')
     new_name = []
     for i, word in enumerate(words):
         if i:
@@ -21,11 +13,11 @@ def to_camel(string: str) -> str:
         else:
             new_name.append(word.lower())
 
-    return "".join(new_name).replace("Id", "ID")
+    return ''.join(new_name).replace('Id', 'ID')
 
 
 def datetime_string(dt: datetime) -> str:
-    return dt.strftime("%Y-%m-%d %H:%M")
+    return dt.strftime('%Y-%m-%d %H:%M')
 
 
 class CustomBaseModel(BaseModel):
@@ -46,33 +38,57 @@ class CustomBaseModel(BaseModel):
 
     @classmethod
     def convert(cls, obj_in: Any) -> Self:
-        """converts the input object to the model class
-        Returns:
-            Self -- the type of the inheriting class
-        """
+        '''
+        `.model_validate()` with `from_attributes=True`
+
+        Parameters
+        ----------
+        obj_in : Any
+
+        Returns
+        -------
+        Self
+        '''
         return cls.model_validate(obj=obj_in, from_attributes=True)
 
-    def serialize(self) -> dict:
-        """the standard arguments for .model_dump()
-        to generalize behaviors across all models.
-        Returns:
-            dict - the dictionary representation of
-            the model
+    def dump(self) -> dict:
+        """
+        `.model_dump()` with `exclude_unset=True` and `exclude_none=True`
+
+        Returns
+        -------
+        dict
         """
         return self.model_dump(exclude_unset=True, exclude_none=True)
 
-    def serialize_exclude(self, exclude: set[str]) -> dict:
+    def dump_exclude(self, exclude: set[str]) -> dict:
+        """
+        `.model_dump()` with `exclude_unset=True`, `exclude_none=True` and
+        `exclude=exclude`
+
+        Parameters
+        ----------
+        exclude : set[str]
+
+        Returns
+        -------
+        dict
+        """
         return self.model_dump(exclude_unset=True, exclude_none=True, exclude=exclude)
 
 
-SchemaT = TypeVar("SchemaT", bound=CustomBaseModel)
+SchemaT = TypeVar('SchemaT', bound=CustomBaseModel)
+
 
 class RequestSchema(CustomBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        strict=True
-    )
+    '''
+    The base schema and configuration for all request schemas.
+    '''
+    model_config = ConfigDict(extra='forbid', strict=True)
 
 
 class ResponseSchema(CustomBaseModel):
+    '''
+    The base schema and configuration for all response schemas.
+    '''
     pass

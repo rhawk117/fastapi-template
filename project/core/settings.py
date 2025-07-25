@@ -1,36 +1,43 @@
 import functools
-from pydantic_settings import BaseSettings, SettingsConfigDict
-import yaml
 from pathlib import Path
 from typing import Any, Final, Self
 
-CONFIG_FILE_NAME: Final[str] = "config.yml"
+import yaml
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+CONFIG_FILE_NAME: Final[str] = 'config.yml'
 
 
 @functools.lru_cache(maxsize=1)
 def get_config_yaml() -> dict[str, Any]:
+    global CONFIG_FILE_NAME
     config_path = Path(CONFIG_FILE_NAME)
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file '{CONFIG_FILE_NAME}' not found.")
 
-    config_contents = config_path.read_text()
+    config_contents = config_path.read_text(encoding='utf-8')
 
     try:
         contents = yaml.safe_load(config_contents)
     except yaml.YAMLError as e:
-        raise RuntimeError(f"Error parsing YAML configuration: {e}")
+        raise RuntimeError(f'Error parsing YAML configuration: {e}')
 
     return contents
 
 
 class YMLSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file_encoding="utf-8", env_nested_delimiter="__", extra="ignore"
+        env_file_encoding='utf-8',
+        env_nested_delimiter='__',
+        extra='ignore'
     )
 
     @classmethod
     def load_config(
-        cls, *, yaml_key: str, overrides: dict[str, Any] | None = None
+        cls,
+        *,
+        yaml_key: str,
+        overrides: dict[str, Any] | None = None
     ) -> Self:
         config = get_config_yaml()
         if yaml_key not in config:
