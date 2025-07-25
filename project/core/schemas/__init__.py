@@ -1,4 +1,8 @@
-from .errors import HTTPErrorSchema, ValidationErrorSchema, collect_validation_errors
+from .error_models import (
+    HTTPErrorSchema,
+    ValidationErrorSchema,
+    collect_validation_errors,
+)
 from .interface import CustomBaseModel, RequestSchema, ResponseSchema
 
 __all__ = [

@@ -1,9 +1,9 @@
 from abc import ABC
 from typing import Generic
 
-from .model_repository import ModelRepository, ModelT
-
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .model_repository import ModelRepository, ModelT
 
 
 class DatabaseService(ABC, Generic[ModelT]):
