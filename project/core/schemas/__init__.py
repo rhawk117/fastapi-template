@@ -1,4 +1,4 @@
-from .error_models import (
+from .errors import (
     HTTPErrorSchema,
     ValidationErrorSchema,
     collect_validation_errors,

@@ -38,17 +38,15 @@ def setup_logging(options: LoggerOptions) -> None:
         ]
     )
 
-    configure_file_logging(
-        options.files_config,
-        options.file_options
-    )
+    configure_file_logging(options.files_config, options.file_options)
 
 
 def configure_file_logging(
-    files_config: LogFilesConfig, file_options: LogFileOptions
+    files_config: LogFilesConfig,
+    file_options: LogFileOptions
 ) -> None:
     base_options = dataclasses.asdict(file_options)
-    directory = base_options.pop('directory', Path('logs'))
+    directory: Path = base_options.pop('directory', Path('logs'))
 
     logger.add(
         directory.joinpath(files_config.error_log_file),
@@ -70,12 +68,4 @@ def configure_file_logging(
 
 
 def get_loguru_logger() -> 'Logger':
-    """
-    Returns the configured Loguru logger instance.
-
-    Returns
-    -------
-    Logger
-        The Loguru logger instance.
-    """
     return logger

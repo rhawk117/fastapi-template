@@ -1,4 +1,4 @@
-from .core import (
+from .setup import (
     LogFileOptions,
     LogFilesConfig,
     LoggerOptions,
