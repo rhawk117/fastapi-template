@@ -1,5 +1,6 @@
 from .errors import (
     HTTPErrorSchema,
+    HTTPValidationErrorSchema,
     ValidationErrorSchema,
     collect_validation_errors,
 )
@@ -11,5 +12,6 @@ __all__ = [
     'ResponseSchema',
     'HTTPErrorSchema',
     'ValidationErrorSchema',
+    'HTTPValidationErrorSchema',
     'collect_validation_errors',
 ]

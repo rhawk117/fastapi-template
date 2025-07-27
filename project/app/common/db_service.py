@@ -11,7 +11,8 @@ class DatabaseService(ABC, Generic[ModelT]):
     in the database. It provides a repository to directly interface with the model
 
     Attributes:
-        models {ModelRepository[ModelT]} -- the repository of the model the service acts on.
+        models {ModelRepository[ModelT]} -- the repository of the model the service acts
+        on.
     """
 
     def __init__(self, model: type[ModelT], db: AsyncSession) -> None:

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import DateTime
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -24,19 +24,6 @@ class AuditedMixin:
         DateTime,
         default=datetime.now(UTC),
         onupdate=datetime.now(UTC),
-        nullable=False,
-    )
-
-
-class DatasourceMixin:
-    id: Mapped[PrimaryKeyId] = mapped_column()
-
-    username: Mapped[str] = mapped_column(String, nullable=False)
-    endpoint: Mapped[str] = mapped_column(String, nullable=False)
-    password: Mapped[str] = mapped_column(String, nullable=False)
-    enabled: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
         nullable=False,
     )
 
