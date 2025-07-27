@@ -18,7 +18,6 @@ class LoginBody(RequestSchema):
 
 
 class SessionIdentity(ResponseSchema):
-
     username: Annotated[
         str, Field(..., description='The username of the users session')
     ]

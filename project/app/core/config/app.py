@@ -63,7 +63,6 @@ class AppConfig(BaseAppSettings):
         ),
     ]
 
-
     CORS_ALLOW_ORIGINS: Annotated[
         list[str],
         Field(
@@ -91,6 +90,13 @@ class AppConfig(BaseAppSettings):
         Field(
             default=True,
             description='Whether to allow credentials in CORS requests.',
+        ),
+    ]
+    SIGNATURE_SALT: Annotated[
+        str,
+        Field(
+            default='signature_salt',
+            description='Salt used for signing data, enhancing security against tampering.',
         ),
     ]
 

@@ -1,10 +1,10 @@
 from app.api.auth.schema import LoginBody
-from app.common.errors import HTTPBadRequest
-from app.common.service_abc import DatabaseService
-from app.core.security.crypto import CryptoUtils
+from app.common.db_service import DatabaseService
+from app.common.http_exceptions import HTTPBadRequest
+from app.core.security.cryptography import CryptoUtils
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .errors import DeleteSelfForbidden, UsernameTaken, UserNotFound
+from .exceptions import DeleteSelfForbidden, UsernameTaken, UserNotFound
 from .model import User
 from .schema import UserCreateBody, UserListResponse, UserResponse, UserUpdateBody
 
@@ -14,17 +14,6 @@ class UserService(DatabaseService[User]):
 
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(User, db)
-
-    def to_response(self, model: User) -> UserResponse:
-        """returns a UserResponse model from the User model
-
-        Arguments:
-            model {User} -- the databas model
-
-        Returns:
-            UserResponse -- the pydantic model
-        """
-        return UserResponse.convert(model)
 
     async def authenticate(self, login_req: LoginBody) -> User | None:
         """verifies the user credentials by checking the hashed password
@@ -50,14 +39,20 @@ class UserService(DatabaseService[User]):
         return await self.models.select(User.username == username)
 
     async def require_username(self, username: str) -> User:
-        """gets the username and throws a 404 if not found
+        """
+        gets the username and throws a 404 if not found
 
-        Arguments:
-            username {str} -- the username to search for
-        Raises:
-            HTTPException: 404 (UserNotFound)
-        Returns:
-            User -- the user model
+        Parameters
+        ----------
+        username : str
+
+        Returns
+        -------
+        User
+
+        Raises
+        ------
+        UserNotFound - 404
         """
         user = await self.select_username(username)
         if not user:
@@ -65,38 +60,50 @@ class UserService(DatabaseService[User]):
         return user
 
     async def create_user(self, create_req: UserCreateBody) -> User:
-        """creates and inserts a user model using the create user request
+        """
+        creates and inserts a user model using the create user request
         schema
 
-        Arguments:
-            db {AsyncSession} -- the database session
-            create_req {CreateUser} -- the request schema
 
-        Returns:
-            User -- the created user
+        Parameters
+        ----------
+        create_req : UserCreateBody
+
+        Returns
+        -------
+        User
         """
-        user_in = create_req.serialize_exclude(exclude={'password'})
+        user_in = create_req.dump_exclude(exclude={'password'})
         user_in['password_hash'] = CryptoUtils.hash(create_req.password)
 
         return await self.models.create(user_in)
 
     async def update_by_id(self, user_id: int, update_req: UserUpdateBody) -> User:
-        """updates a user ORM model using the UpdateUser request
+        """
+        updates a user ORM model using the UpdateUser request
         body schema given a valid user_id
 
-        Arguments:
-            user_id {int}
-            update_req {UpdateUser}
-        Raises:
-            HTTPException: 404 (UserNotFound)
-        Returns:
-            User -- the updated user ORM model
+
+        Parameters
+        ----------
+        user_id : int
+        update_req : UserUpdateBody
+
+        Returns
+        -------
+        User
+
+        Raises
+        ------
+        UserNotFound - 404
+        HTTPBadRequest - 400
+        UsernameTaken - 400
         """
         usr_updated = await self.get_by_id(user_id)
         if not usr_updated:
             raise UserNotFound()
 
-        update_dump = update_req.serialize_exclude(exclude={'password'})
+        update_dump = update_req.dump_exclude(exclude={'password'})
         if update_req.password:
             update_dump['password_hash'] = CryptoUtils.hash(update_req.password)
 
@@ -111,13 +118,17 @@ class UserService(DatabaseService[User]):
     async def new_username_taken(
         self, new_username: str | None, old_username: str
     ) -> bool:
-        """edge case checking if the users new username is already taken
+        """
+        edge case checking if the users new username is already taken
 
-        Arguments:
-            username {str} -- the username to check
+        Parameters
+        ----------
+        new_username : str | None
+        old_username : str
 
-        Returns:
-            bool -- True if the username is already taken
+        Returns
+        -------
+        bool
         """
         return (
             new_username is not None
@@ -126,13 +137,18 @@ class UserService(DatabaseService[User]):
         )
 
     async def delete_by_id(self, user_id: int, admin_name: str) -> None:
-        """deletes the user given a valid user_id
+        """
+        deletes a user by id, raises a UserNotFound if the user does not exist
 
-        Arguments:
-            user_id {int}
-            admin_name {str} -- the name of the admin
-        Raises:
-            HTTPException: 404
+        Parameters
+        ----------
+        user_id : int
+        admin_name : str
+
+        Raises
+        ------
+        UserNotFound - 404
+        DeleteSelfForbidden - 403
         """
         user = await self.get_by_id(user_id)
         if user is None:
@@ -153,29 +169,32 @@ class UserService(DatabaseService[User]):
         returns all the users in the database if the user is an admin
         otherwise returns only the user's data
 
-        Arguments:
-            user_role {str} -- the role of the user
+        Parameters
+        ----------
+        reader_role : User
 
-        Returns:
-            list[User] -- list of users
+        Returns
+        -------
+        UserListResponse
         """
         readable_users = await self.models.select_all(
             User.role_level <= reader_role.role_level
         )
         response = UserListResponse.from_results(
-            [self.to_response(user) for user in readable_users]
+            [UserResponse.convert(user) for user in readable_users]
         )
         return response
 
     async def read_all_users(self) -> UserListResponse:
-        """returns all the users in the database
-        Arguments:
-            db {AsyncSession} -- the database session
-        Returns:
-            list[User] -- list of users
+        """
+        returns all the users in the database
+
+        Returns
+        -------
+        UserListResponse
         """
         all_users = await self.models.select_all()
         response = UserListResponse.from_results(
-            [self.to_response(user) for user in all_users]
+            [UserResponse.convert(user) for user in all_users]
         )
         return response
