@@ -15,6 +15,10 @@ class UserService(DatabaseService[User]):
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(User, db)
 
+    def to_response(self, user: User) -> UserResponse:
+        """Converts a User model to a UserResponse schema"""
+        return UserResponse.convert(user)
+
     async def authenticate(self, login_req: LoginBody) -> User | None:
         """verifies the user credentials by checking the hashed password
 
