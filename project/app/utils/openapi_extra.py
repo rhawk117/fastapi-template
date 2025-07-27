@@ -61,16 +61,20 @@ def ErrorDoc(
         title=title,
     )
 
+def ResponseList(responses: list[dict]) -> dict:
+    """
+    Combines multiple response dictionaries into a single dictionary.
 
-def ResponseList(responses: dict) -> dict:
-    combined_responses = {}
-    for status_code, response in responses.items():
-        if status_code in combined_responses:
-            combined_responses[status_code].update(response)
-        else:
-            combined_responses[status_code] = response
+    Args:
+        responses (list[dict]): List of response dictionaries to combine.
 
-    return combined_responses
+    Returns:
+        dict: Combined response dictionary.
+    """
+    combined = {}
+    for response in responses:
+        combined.update(response)
+    return combined
 
 
 def SchemaError(
@@ -93,10 +97,10 @@ def SchemaError(
     )
 
 
-def NotFound(resource: str, status_code: int = 404) -> dict:
+def NotFound(resource: str) -> dict:
     return ErrorDoc(
         description=f'{resource} not found.',
-        status_code=status_code,
+        status_code=404,
         model=HTTPErrorSchema,
         title='Not Found',
     )

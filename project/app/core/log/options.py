@@ -1,7 +1,7 @@
 import dataclasses
 from pathlib import Path
 
-from core.types import LogLevelNames
+from app.common.types import LogLevelNames
 
 
 @dataclasses.dataclass(slots=True, frozen=True, kw_only=True)
@@ -23,13 +23,9 @@ class LogFileOptions:
     retention: str = dataclasses.field(default='7 days')
     directory: Path = dataclasses.field(default=Path('logs'))
 
+
 @dataclasses.dataclass(slots=True, frozen=True, kw_only=True)
 class LoggerOptions:
     stdout_level: LogLevelNames = dataclasses.field(default='INFO')
-    files_config: LogFilesConfig = dataclasses.field(
-        default_factory=LogFilesConfig
-    )
-    file_options: LogFileOptions = dataclasses.field(
-        default_factory=LogFileOptions
-    )
-
+    files_config: LogFilesConfig = dataclasses.field(default_factory=LogFilesConfig)
+    file_options: LogFileOptions = dataclasses.field(default_factory=LogFileOptions)
