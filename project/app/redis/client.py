@@ -50,4 +50,11 @@ async def disconnect_redis() -> None:
 
 
 async def get_redis_client() -> Redis:
+    '''
+    Dependency wrapper around the Redis client.
+
+    Returns
+    -------
+    Redis
+    '''
     return redis_client

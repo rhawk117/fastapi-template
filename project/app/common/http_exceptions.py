@@ -20,7 +20,7 @@ class HTTPNotFound(BaseHTTPException):
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Resource '{resource}' not found.",
-            headers={'X-Error': 'ResourceNotFound'},
+            headers={'X-Error': HTTPStatus.NOT_FOUND.phrase},
         )
 
 
@@ -29,7 +29,7 @@ class HTTPBadRequest(BaseHTTPException):
         super().__init__(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail,
-            headers={'X-Error': 'BadRequest'},
+            headers={'X-Error': HTTPStatus.BAD_REQUEST.phrase},
         )
 
 

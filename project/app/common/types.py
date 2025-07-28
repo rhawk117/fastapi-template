@@ -7,7 +7,11 @@ from pydantic import PositiveInt, StringConstraints
 PathID = Annotated[int, Path(..., description='The id of model.', gt=0)]
 
 AlphanumericString = Annotated[
-    str, StringConstraints(min_length=1, max_length=128, pattern=r'^\w+$')
+    str, StringConstraints(
+        min_length=1,
+        max_length=128,
+        pattern=r'^\w+$'
+    )
 ]
 
 PositiveNumber = Annotated[int, PositiveInt]
@@ -15,6 +19,7 @@ FixedLengthString = Annotated[str, StringConstraints(min_length=1, max_length=25
 
 CallNext: TypeAlias = Callable[[Request], Awaitable[Response]]
 
-LogLevelNames = Literal['TRACE', 'CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']
-
-LogLevelInt = Literal[0, 10, 20, 30, 40, 50]
+LogLevelNames: TypeAlias = Literal[
+    'TRACE', 'CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'
+]
+LogLevelInt: TypeAlias = Literal[0, 10, 20, 30, 40, 50]

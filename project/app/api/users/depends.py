@@ -18,13 +18,16 @@ from .service import UserService
 
 
 async def get_user_service(db: DatabaseDepends) -> UserService:
-    """creates the user service with the DB dependency
+    """
+    Returns a UserService instance that is used to interact with the user database.
 
-    Arguments:
-        db {DatabaseDepends} -- the DB dependency
+    Parameters
+    ----------
+    db : DatabaseDepends
 
-    Returns:
-        UserService -- the user service
+    Returns
+    -------
+    UserService
     """
     return UserService(db)
 
@@ -33,7 +36,8 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 
 
 async def session_id_to_user(
-    session_data: SessionData, user_service: UserService
+    session_data: SessionData,
+    user_service: UserService
 ) -> User:
     """Converts the SessionData into an AuthenticationDep object
     which is used to authenticate the user
@@ -67,18 +71,30 @@ async def get_auth_context(
     user_service: UserServiceDep,
     session_service: SessionServiceDep,
 ) -> SessionContext:
-    """runs all of the logic for authentication with both the auth dependency
+    """
+    runs all of the logic for authentication with both the auth dependency
     function running and user function to ensure the user still exists and uses key
     service to get the keys health.
 
     contains alot of dependencies to ensure that only one of each instance such
     as a database session is created upon each request, however has the downside of being
 
-    Returns:
-        AuthContext -- the associated user and meta data for the api key
+
+    Parameters
+    ----------
+    client : FingerprintDep
+    session_auth : SessionIdDep
+    user_service : UserServiceDep
+    session_service : SessionServiceDep
+
+    Returns
+    -------
+    SessionContext
     """
     session_payload = await validate_user_session(
-        session_id=session_auth, client=client, session_service=session_service
+        session_id=session_auth,
+        client=client,
+        session_service=session_service
     )
 
     user = await session_id_to_user(session_payload, user_service)
@@ -99,10 +115,13 @@ SessionContextDep = Annotated[SessionContext, Depends(get_auth_context)]
 
 
 def role_checker(min_role: Role):
-    """returns a factory function that checks if the current user's role
-    is greater than or equal to the minimum role required
-    Arguments:
-        min_role {Role} -- the minimum role required to access the route
+    """
+    Returns a function that checks if the user is above or equal to the
+    minimum role required.
+
+    Parameters
+    ----------
+    min_role : Role
     """
 
     async def role_allowed(current_user: CurrentUserDep) -> User:

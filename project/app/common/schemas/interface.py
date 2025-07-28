@@ -21,7 +21,8 @@ def datetime_string(dt: datetime) -> str:
 
 
 class CustomBaseModel(BaseModel):
-    """The base model for all app models allowing for standard serialization
+    """
+    The Pydantic base model for all app models allowing for standard serialization
     and deserialization of ambiguous types such as datetime, globally allow
     camel case in the body of requests and responses and also allows for
     the use of enums as values in the models
@@ -74,42 +75,10 @@ class CustomBaseModel(BaseModel):
         -------
         dict
         """
-        return self.model_dump(exclude_unset=True, exclude_none=True, exclude=exclude)
+        return self.model_dump(
+            exclude_unset=True,
+            exclude_none=True,
+            exclude=exclude
+        )
 
 
-class RequestSchema(CustomBaseModel):
-    """
-    The base schema and configuration for all request schemas.
-    """
-
-    model_config = ConfigDict(extra='forbid', strict=True)
-
-
-class ResponseSchema(CustomBaseModel):
-    """
-    The base schema and configuration for all response schemas.
-    """
-
-    pass
-
-
-SchemaT = TypeVar('SchemaT', bound=CustomBaseModel)
-ResponseT = TypeVar('ResponseT', bound=ResponseSchema)
-
-
-class ResponseList(ResponseSchema, Generic[ResponseT]):
-    size: Annotated[
-        int, Field(..., description='The total number of items in the list')
-    ]
-
-    is_empty: Annotated[bool, Field(..., description='Whether the list is empty')]
-
-    data: Annotated[
-        list[Any], Field(..., description='The list of items returned by the API')
-    ]
-
-    @classmethod
-    def from_results(cls, data: list[ResponseT]) -> 'Self':
-        items = len(data)
-        is_empty = items == 0
-        return cls(size=items, is_empty=is_empty, data=data)
