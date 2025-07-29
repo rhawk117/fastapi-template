@@ -2,10 +2,11 @@ import logging
 from typing import Annotated
 
 from app.api.users.service import UserService
-from app.common.http_exceptions import HTTPForbidden
-from app.db.depends import DatabaseDepends
-from app.utils.openapi_extra import ErrorDoc, ResponseList
 from fastapi import APIRouter, Body, status
+
+from backend.app.depends import DatabaseDepends
+from backend.common.http_exceptions import HTTPForbidden
+from backend.utils.openapi_extra import HTTPError
 
 from .depends import FingerprintDep, SessionIdDep, SessionServiceDep
 from .exceptions import HTTPInvalidCredentials
@@ -17,19 +18,18 @@ from .schema import (
     SessionResponse,
 )
 
-auth_logger = logging.getLogger('security.auth')
+auth_logger = logging.getLogger('auth')
 auth_router = APIRouter()
 
 
 @auth_router.post(
     '/login',
     response_model=SessionResponse,
-    responses=ErrorDoc(
-        'When the user provides invalid credentials',
-        status.HTTP_401_UNAUTHORIZED
-    ),
+    responses={
+        status.HTTP_401_UNAUTHORIZED: HTTPError('Invalid credentials provided.')
+    },
 )
-async def login_user(
+async def login(
     auth_form: Annotated[LoginBody, Body(...)],
     session_service: SessionServiceDep,
     client: FingerprintDep,
@@ -56,7 +56,9 @@ async def login_user(
     HTTPInvalidCredentials
     """
     user_service = UserService(db)
-    verified_user = await user_service.authenticate(auth_form)
+    verified_user = await user_service.authenticate(
+        auth_form.username, auth_form.password
+    )
     if not verified_user:
         auth_logger.warning(f'Failed login attempt on user {auth_form.username}')
         raise HTTPInvalidCredentials()
@@ -70,33 +72,21 @@ async def login_user(
     )
 
     session_identity = SessionIdentity(
-        username=verified_user.username,
-        role=str(verified_user.role)
+        username=verified_user.username, role=str(verified_user.role)
     )
 
-    return SessionResponse(
-        session_id=session_id,
-        identity=session_identity
-    )
+    return SessionResponse(session_id=session_id, identity=session_identity)
 
 
 @auth_router.post(
     '/logout',
     response_model=LogoutResponse,
-    responses=ResponseList(
-        [
-            ErrorDoc(
-                'When the user tries to log out without a valid session',
-                status.HTTP_403_FORBIDDEN,
-            ),
-            ErrorDoc(
-                'When the user tries to log out with an invalid session',
-                status.HTTP_401_UNAUTHORIZED,
-            ),
-        ]
-    ),
+    responses={
+        status.HTTP_403_FORBIDDEN: HTTPError('Invalid session.'),
+        status.HTTP_401_UNAUTHORIZED: HTTPError('Expired or missing session.'),
+    },
 )
-async def logout_user(
+async def logout(
     session_auth: SessionIdDep, session_service: SessionServiceDep
 ) -> LogoutResponse:
     """
@@ -138,34 +128,14 @@ async def logout_user(
 @auth_router.get(
     '/session',
     response_model=SessionInfo,
-    responses=ResponseList(
-        [
-            ErrorDoc(
-                'When the user tries to log out without a valid session',
-                status.HTTP_403_FORBIDDEN,
-            ),
-            ErrorDoc(
-                'When the user tries to log out with an invalid session',
-                status.HTTP_401_UNAUTHORIZED,
-            ),
-        ]
-    ),
+    responses={status.HTTP_403_FORBIDDEN: HTTPError('Invalid or expired session.')},
 )
-async def get_session_status(
-    session_auth: SessionIdDep,
-    session_service: SessionServiceDep
+async def get_session_info(
+    session_auth: SessionIdDep, session_service: SessionServiceDep
 ) -> SessionInfo:
-    """Returns the session information for the current user
-
-    Args:
-        session_auth (SessionIdDep): _the session id_
-        session_service (SessionServiceDep): _the session service_
-
-    Raises:
-        HTTPForbidden: _invalid or expired session_
-
-    Returns:
-        SessionInfo: _the session data_
+    """
+    Gets the session information for the current session using the
+    _"Session ID" dependency_.
     """
     if not session_auth or not session_auth.credentials:
         raise HTTPForbidden('Invalid or expired Session')

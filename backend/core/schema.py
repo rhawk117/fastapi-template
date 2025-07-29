@@ -44,6 +44,7 @@ class CustomBaseModel(BaseModel):
         exclude_unset: bool = True,
         exclude_defaults: bool = False,
         by_alias: bool = True,
+        exclude: set[str] | None = None
     ) -> dict:
         dumped = self.model_dump()
         return jsonable_encoder(
@@ -52,4 +53,6 @@ class CustomBaseModel(BaseModel):
             exclude_unset=exclude_unset,
             exclude_defaults=exclude_defaults,
             by_alias=by_alias,
+            exclude=exclude
         )
+

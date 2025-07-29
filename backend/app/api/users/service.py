@@ -1,24 +1,30 @@
-from app.api.auth.schema import LoginBody
-from app.common.db_service import DatabaseService
-from app.common.http_exceptions import HTTPBadRequest
-from app.core.security.cryptography import CryptoUtils
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .exceptions import DeleteSelfForbidden, UsernameTaken, UserNotFound
-from .model import User
-from .schema import UserCreateBody, UserListResponse, UserResponse, UserUpdateBody
+from backend.common.http_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
+from backend.core.security.cryptography import CryptoUtils
+from backend.core.security.rbac import Role
+
+from .exceptions import UserNotFound
+from .repository import UserRepository
+from .schema import (
+    UserCreateModel,
+    UserDetailsModel,
+    UserDetailsPage,
+    UserDetailsQueryParams,
+    UserModel,
+    UserPage,
+    UserQueryParams,
+    UserUpdateModel,
+)
 
 
-class UserService(DatabaseService[User]):
+class UserService:
     """The service for the User model"""
 
     def __init__(self, db: AsyncSession) -> None:
-        super().__init__(User, db)
+        self.repository = UserRepository(db)
 
-    def to_response(self, user: User) -> UserResponse:
-        return UserResponse.convert(user)
-
-    async def authenticate(self, login_req: LoginBody) -> User | None:
+    async def authenticate(self, username: str, password: str) -> UserModel | None:
         """verifies the user credentials by checking the hashed password
 
         Arguments:
@@ -27,43 +33,18 @@ class UserService(DatabaseService[User]):
         Returns:
             Optional[User]
         """
-        existing_user = await self.select_username(login_req.username)
-        if not existing_user:
+        user = await self.repository.get_by_username(username)
+        if not user:
             return None
 
         if not CryptoUtils.verify_hash(
-            plain_text=login_req.password,
-            hashed_text=existing_user.password_hash
+            plain_text=password, hashed_text=user.password_hash
         ):
             return None
 
-        return existing_user
+        return UserModel.model_validate(user)
 
-    async def select_username(self, username: str) -> User | None:
-        return await self.models.select(User.username == username)
-
-    async def require_username(self, username: str) -> User:
-        """
-        gets the username and throws a 404 if not found
-
-        Parameters
-        ----------
-        username : str
-
-        Returns
-        -------
-        User
-
-        Raises
-        ------
-        UserNotFound - 404
-        """
-        user = await self.select_username(username)
-        if not user:
-            raise UserNotFound()
-        return user
-
-    async def create_user(self, create_req: UserCreateBody) -> User:
+    async def create_user(self, create_req: UserCreateModel) -> UserModel:
         """
         creates and inserts a user model using the create user request
         schema
@@ -77,12 +58,25 @@ class UserService(DatabaseService[User]):
         -------
         User
         """
-        user_in = create_req.dump_exclude(exclude={'password'})
-        user_in['password_hash'] = CryptoUtils.hash(create_req.password)
+        if await self.repository.username_taken(create_req.username):
+            raise HTTPBadRequest('Username already taken.')
 
-        return await self.models.create(user_in)
+        if await self.repository.email_taken(create_req.email):
+            raise HTTPBadRequest('Email already taken.')
 
-    async def update_by_id(self, user_id: int, update_req: UserUpdateBody) -> User:
+        user_kwargs = create_req.model_dump(exclude={'password'})
+        user_kwargs['password_hash'] = CryptoUtils.hash(create_req.password)
+        user_orm = await self.repository.insert(user_kwargs)
+
+        return UserModel.model_validate(user_orm)
+
+    async def update_user(
+        self,
+        user_id: int,
+        update_req: UserUpdateModel,
+        current_user_id: int,
+        current_user_role: Role,
+    ) -> UserModel:
         """
         updates a user ORM model using the UpdateUser request
         body schema given a valid user_id
@@ -103,21 +97,27 @@ class UserService(DatabaseService[User]):
         HTTPBadRequest - 400
         UsernameTaken - 400
         """
-        usr_updated = await self.get_by_id(user_id)
-        if not usr_updated:
-            raise UserNotFound()
 
-        update_dump = update_req.dump_exclude(exclude={'password'})
+        existing_user = await self.repository.get_by_id(user_id)
+        if not existing_user:
+            raise HTTPNotFound('User not found.')
+
+        if current_user_id != existing_user.id and not current_user_role == Role.ADMIN:
+            raise HTTPForbidden('You are not authorized to perform this action.')
+
+        if await self.new_username_taken(update_req.username, existing_user.username):
+            raise HTTPBadRequest('Username already taken.')
+
+        update_arguments = update_req.model_dump(exclude={'password'})
+        if not update_arguments and not update_req.password:
+            raise HTTPBadRequest('No fields to update.')
+
         if update_req.password:
-            update_dump['password_hash'] = CryptoUtils.hash(update_req.password)
+            update_arguments['password_hash'] = CryptoUtils.hash(update_req.password)
 
-        if not update_dump:
-            raise HTTPBadRequest('Cannot update a user without making any changes.')
+        updated_user = await self.repository.update(update_arguments, existing_user)
 
-        if self.new_username_taken(update_req.username, usr_updated.username):
-            raise UsernameTaken()
-
-        return await self.models.update(usr_updated, update_dump)
+        return UserModel.model_validate(updated_user)
 
     async def new_username_taken(
         self, new_username: str | None, old_username: str
@@ -137,10 +137,10 @@ class UserService(DatabaseService[User]):
         return (
             new_username is not None
             and new_username != old_username
-            and await self.select_username(new_username) is not None
+            and await self.repository.username_taken(new_username)
         )
 
-    async def delete_by_id(self, user_id: int, admin_name: str) -> None:
+    async def delete_user(self, user_id: int, admin_name: str) -> None:
         """
         deletes a user by id, raises a UserNotFound if the user does not exist
 
@@ -154,51 +154,123 @@ class UserService(DatabaseService[User]):
         UserNotFound - 404
         DeleteSelfForbidden - 403
         """
-        user = await self.get_by_id(user_id)
+        user = await self.repository.get_by_id(user_id)
         if user is None:
             raise UserNotFound()
 
-        acting_admin = await self.select_username(admin_name)
+        acting_admin = await self.repository.get_by_username(admin_name)
+        if acting_admin is None:  # should never happen just to be safe
+            raise HTTPForbidden('You are not authorized to delete users.')
 
-        if acting_admin is None or acting_admin.id == user_id:
-            raise DeleteSelfForbidden()
+        if acting_admin.id == user_id:
+            raise HTTPForbidden('You cannot delete yourself.')
 
-        await self.models.delete(user)
+        await self.repository.delete(user)
 
-    async def get_by_id(self, user_id: int) -> User | None:
-        return await self.models.select(User.id == user_id)
+    async def query_users(self, reader_role: Role, params: UserQueryParams) -> UserPage:
+        page_result = await self.repository.get_page(reader_role, params)
 
-    async def role_based_read_all(self, reader_role: User) -> UserListResponse:
+        models = [UserModel.model_validate(user) for user in page_result.rows]
+
+        return UserPage.from_results(
+            data=models, total_items=page_result.total, page_params=params
+        )
+
+    async def get_user_detail(self, user_id: int) -> UserDetailsModel:
         """
-        returns all the users in the database if the user is an admin
-        otherwise returns only the user's data
+        retrieves a user by id, raises a UserNotFound if the user does not exist
 
         Parameters
         ----------
-        reader_role : User
+        user_id : int
 
         Returns
         -------
-        UserListResponse
-        """
-        readable_users = await self.models.select_all(
-            User.role_level <= reader_role.role_level
-        )
-        response = UserListResponse.from_results(
-            [UserResponse.convert(user) for user in readable_users]
-        )
-        return response
+        UserModel
 
-    async def read_all_users(self) -> UserListResponse:
+        Raises
+        ------
+        UserNotFound - 404
         """
-        returns all the users in the database
+        user = await self.repository.get_by_id(user_id)
+        if not user:
+            raise UserNotFound()
+
+        return UserDetailsModel.model_validate(user)
+
+    async def query_user_details(
+        self, reader_role: Role, params: UserDetailsQueryParams
+    ) -> UserDetailsPage:
+        """
+        retrieves a user by id, raises a UserNotFound if the user does not exist
+
+        Parameters
+        ----------
+        reader_role : Role
+        user_id : int
 
         Returns
         -------
-        UserListResponse
+        UserModel
+
+        Raises
+        ------
+        UserNotFound - 404
         """
-        all_users = await self.models.select_all()
-        response = UserListResponse.from_results(
-            [UserResponse.convert(user) for user in all_users]
+
+        results = await self.repository.get_details_page(reader_role, params)
+
+        models = [UserDetailsModel.model_validate(user) for user in results.rows]
+
+        return UserDetailsPage.from_results(
+            data=models, total_items=results.total, page_params=params
         )
-        return response
+
+    async def get_user(self, user_id: int, current_user_role: Role) -> UserModel:
+        '''
+        gets a user by id, raises a UserNotFound if the user does not exist
+
+        Parameters
+        ----------
+        user_id : int
+        current_user_role : Role
+
+        Returns
+        -------
+        UserModel
+
+        Raises
+        ------
+        UserNotFound
+        HTTPForbidden
+        '''
+        target_user = await self.repository.get_by_id(user_id)
+        if not target_user:
+            raise UserNotFound()
+
+        if current_user_role != Role.ADMIN and target_user.id != user_id:
+            raise HTTPForbidden('You are not authorized to view this user.')
+
+        return UserModel.model_validate(target_user)
+
+    async def get_username(self, username: str) -> UserModel:
+        """
+        retrieves a user by username, raises a UserNotFound if the user does not exist
+
+        Parameters
+        ----------
+        username : str
+
+        Returns
+        -------
+        UserModel
+
+        Raises
+        ------
+        UserNotFound - 404
+        """
+        user = await self.repository.get_by_username(username)
+        if not user:
+            raise HTTPNotFound('user')
+
+        return UserModel.model_validate(user)

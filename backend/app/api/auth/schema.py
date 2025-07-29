@@ -2,18 +2,19 @@ import time
 from datetime import datetime
 from typing import Annotated, Self
 
-from app.common.schemas import CustomBaseModel, RequestSchema, ResponseSchema
-from app.common.types import AlphanumericString
-from app.core.security.fingerprint import ClientFingerprint
-from pydantic import Field
+from pydantic import BaseModel, Field
+
+from backend.common.schemas import RequestSchema, ResponseSchema
+from backend.common.types import AlphaString
+from backend.core.security.fingerprint import ClientFingerprint
 
 
 class LoginBody(RequestSchema):
     username: Annotated[
-        AlphanumericString, Field(..., description='The username of the user to login')
+        AlphaString, Field(..., description='The username of the user to login')
     ]
     password: Annotated[
-        AlphanumericString, Field(..., description='The password of the user to login')
+        AlphaString, Field(..., description='The password of the user to login')
     ]
 
 
@@ -24,7 +25,7 @@ class SessionIdentity(ResponseSchema):
     role: Annotated[str, Field(..., description='The role of the user')]
 
 
-class SessionData(CustomBaseModel):
+class SessionData(BaseModel):
     """A model to represent the dictionary encrypted and stored in the redis
     store that represents a session.
     """
@@ -72,7 +73,7 @@ class SessionResponse(ResponseSchema):
     ]
 
 
-class SessionHealth(CustomBaseModel):
+class SessionHealth(ResponseSchema):
     max_age_at: Annotated[
         datetime,
         Field(
@@ -95,7 +96,7 @@ class SessionHealth(CustomBaseModel):
     ]
 
 
-class SessionInfo(CustomBaseModel):
+class SessionInfo(ResponseSchema):
     """A model to represent the information stored in the redis store"""
 
     owner: Annotated[

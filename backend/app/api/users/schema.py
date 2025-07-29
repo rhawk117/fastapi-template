@@ -11,8 +11,10 @@ from backend.common.schemas import (
     PageParams,
     RequestSchema,
     ResponseSchema,
+    SortOrderParams,
+    TimeStampParams,
 )
-from backend.common.types import AlphaString, SortOrder
+from backend.common.types import AlphaString
 from backend.core.security.rbac import Role
 
 
@@ -21,6 +23,13 @@ class UserModel(ResponseSchema):
     email: Annotated[EmailStr, Field(..., description='The email of the user')]
     username: Annotated[AlphaString, Field(..., description='The username of the user')]
     role: Annotated[Role, Field(..., description='The role of the user')]
+
+
+class UserAuthModel(UserModel):
+    password_hash: Annotated[
+        str,
+        Field(..., description='The hashed password of the user')
+    ]
 
 
 class UserDetailsModel(ResponseSchema):
@@ -35,13 +44,13 @@ class UserDetailsModel(ResponseSchema):
     ]
 
 
-class UserCreate(RequestSchema):
+class UserCreateModel(RequestSchema):
     email: Annotated[EmailStr, Field(..., description='The email of the user')]
     username: Annotated[AlphaString, Field(..., description='The username of the user')]
     password: Annotated[AlphaString, Field(..., description='The password of the user')]
 
 
-class UserUpdateBody(RequestSchema):
+class UserUpdateModel(RequestSchema):
     username: Annotated[str | None, Field(None)] = None
     password: Annotated[str | None, Field(None)] = None
     role: Annotated[Role | None, Field(None)] = None
@@ -55,30 +64,30 @@ class SessionContext(ResponseSchema):
     ]
 
 
-class UserSort(StrEnum):
+class UserSortTypes(StrEnum):
     USERNAME = 'username'
     EMAIL = 'email'
 
 
-class UserQueryParams(PageParams):
-    sort_by: Annotated[
-        UserSort,
-        Field(
-            default=UserSort.USERNAME,
-            description='The field to sort the users by',
-        ),
-    ]
-    sort_order: Annotated[
-        SortOrder,
-        Field(
-            default=SortOrder.ASC,
-            description='The order to sort the users by',
-        ),
-    ]
+UserSort = Annotated[
+    UserSortTypes,
+    Field(
+        default=UserSortTypes.USERNAME,
+        description='The field to sort the users by',
+    ),
+]
+
+class UserQueryParams(PageParams, SortOrderParams):
+    sort_by: UserSort
+
+
+class UserDetailsQueryParams(UserQueryParams, TimeStampParams):
+    pass
 
 
 class UserPage(PagedResponse[UserModel]):
     pass
+
 
 class UserDetailsPage(PagedResponse[UserDetailsModel]):
     pass

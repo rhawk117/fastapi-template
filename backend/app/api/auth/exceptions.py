@@ -1,4 +1,4 @@
-from app.common.http_exceptions import HTTPForbidden, HTTPUnauthorized
+from backend.common.http_exceptions import HTTPForbidden, HTTPUnauthorized
 
 
 class HTTPInvalidCredentials(HTTPUnauthorized):

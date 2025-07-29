@@ -1,8 +1,7 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, status
+from fastapi import APIRouter, Body, Depends, Query, status
 
-from backend.common.http_exceptions import HTTPForbidden, HTTPNotFound
 from backend.common.types import PathID
 from backend.utils.openapi_extra import HTTPError
 
@@ -14,15 +13,16 @@ from .depends import (
     SessionContextDep,
     UserServiceDep,
 )
-from .exceptions import UsernameTaken, UserNotFound
 from .schema import (
     SessionContext,
-    UserCreateBody,
-    UserDetailsListResponse,
-    UserDetailsResponse,
-    UserListResponse,
-    UserResponse,
-    UserUpdateBody,
+    UserCreateModel,
+    UserDetailsModel,
+    UserDetailsPage,
+    UserDetailsQueryParams,
+    UserModel,
+    UserPage,
+    UserQueryParams,
+    UserUpdateModel,
 )
 
 user_router = APIRouter(
@@ -54,35 +54,28 @@ async def get_current_user(context: SessionContextDep) -> SessionContext:
     return context
 
 
-@user_router.get('/', response_model=UserListResponse)
-async def get_all_users(
-    user_service: UserServiceDep, reader: CurrentUserDep
-) -> UserListResponse:
-    """reads all users based on the role of the reader (no read up)
-    Arguments:
-        user_service {UserServiceDep} -- the service dep
-        reader {CurrentUser} -- the current user
-
-    Returns:
-        list[UserResponse] -- all of the users based on the readers role
-    """
-    response = await user_service.role_based_read_all(reader)
-    return response
-
-
 # /
+@user_router.get('/', response_model=UserPage)
+async def query_all_users(
+    params: Annotated[UserQueryParams, Query(...)],
+    reader: CurrentUserDep,
+    user_service: UserServiceDep,
+) -> UserPage:
+    return await user_service.query_users(reader_role=reader.role, params=params)
 
 
 @user_router.post(
     '/',
-    response_model=UserResponse,
     dependencies=[Depends(AdminRequired)],
+    response_model=UserModel,
     status_code=status.HTTP_201_CREATED,
-    responses=ErrorDoc('The username is already taken', 400),
+    responses={
+        status.HTTP_400_BAD_REQUEST: HTTPError('The username or email is already taken')
+    },
 )
-async def create_new_user(
-    create_req: Annotated[UserCreateBody, Body(...)], user_service: UserServiceDep
-) -> UserResponse:
+async def create_user(
+    create_req: Annotated[UserCreateModel, Body(...)], user_service: UserServiceDep
+) -> UserModel:
     """
     ### ADMIN PROTECTED
 
@@ -103,21 +96,19 @@ async def create_new_user(
     ------
     UsernameTaken - 400 Bad Request
     """
-    username_taken = await user_service.select_username(create_req.username)  # type: ignore
-    if username_taken:
-        raise UsernameTaken()
-
-    new_user = await user_service.create_user(create_req)
-    return user_service.to_response(new_user)
+    return await user_service.create_user(create_req=create_req)
 
 
 # /details
 @user_router.get(
     '/details',
-    dependencies=[Depends(AdminRequired)],
-    response_model=UserDetailsListResponse,
+    response_model=UserDetailsPage,
 )
-async def get_all_user_details(user_service: UserServiceDep) -> UserDetailsListResponse:
+async def query_user_details(
+    params: Annotated[UserDetailsQueryParams, Query(...)],
+    admin: AdminRoleDep,
+    user_service: UserServiceDep,
+) -> UserDetailsPage:
     """
     Admin protected route to read all of the user details, including
     the creation date and last updated timestamps
@@ -130,22 +121,20 @@ async def get_all_user_details(user_service: UserServiceDep) -> UserDetailsListR
     -------
     UserDetailsListResponse
     """
-    all_users = await user_service.models.select_all()
-    return UserDetailsListResponse.from_results(
-        [UserDetailsResponse.convert(user) for user in all_users]
-    )
+    page = await user_service.query_user_details(params=params, reader_role=admin.role)
+    return page
 
 
 # /details/{user_id}
 @user_router.get(
     '/details/{user_id}/',
     dependencies=[Depends(AdminRequired)],
-    response_model=UserDetailsResponse,
-    responses=NotFound('user'),
+    response_model=UserDetailsModel,
+    responses={status.HTTP_404_NOT_FOUND: HTTPError('The user does not exist')},
 )
-async def get_user_id_details(
+async def get_user_details(
     user_id: PathID, user_service: UserServiceDep
-) -> UserDetailsResponse:
+) -> UserDetailsModel:
     """
     reads the details of a single user
 
@@ -162,90 +151,70 @@ async def get_user_id_details(
     ------
     UserNotFound
     """
-
-    user = await user_service.get_by_id(user_id)
-    if not user:
-        raise UserNotFound()
-    return UserDetailsResponse.convert(user)
+    return await user_service.get_user_detail(user_id)
 
 
 # /{user_id}/ - Read, Update, Delete
 @user_router.patch(
     '/{user_id}/',
-    response_model=UserResponse,
-    dependencies=[Depends(AdminRequired)],
+    response_model=UserModel,
     status_code=status.HTTP_202_ACCEPTED,
-    responses=ResponseList(
-        [ErrorDoc('The user name being updated to is taken', 400), NotFound('user')]
-    ),
+    responses={
+        status.HTTP_400_BAD_REQUEST: HTTPError('The username or email is taken')
+    },
 )
-async def update_user_id(
+async def update_user(
+    update_req: Annotated[UserUpdateModel, Body(...)],
     user_id: PathID,
-    update_req: Annotated[UserUpdateBody, Body()],
+    current_user: CurrentUserDep,
     user_service: UserServiceDep,
-) -> UserResponse:
-    """updates the user given an id and uses the schema to update the user's data
-
-    **Path**
-        /users/{user_id}/ - the user id to update
-
-    **Response**
-        UserResponse -- the updated user
+) -> UserModel:
     """
-    updated_data = await user_service.update_by_id(
-        user_id=user_id, update_req=update_req
+    Updates the user given it's ID
+    """
+    updated_user = await user_service.update_user(
+        user_id=user_id,
+        update_req=update_req,
+        current_user_id=current_user.id,
+        current_user_role=current_user.role,
     )
-    return UserResponse.convert(updated_data)
+    return updated_user
 
 
 @user_router.delete(
     '/{user_id}/',
-    response_model=MessagedResponse,
-    responses=ResponseList(
-        [ErrorDoc('An admin attempts to delete themselves', 403), NotFound('user')]
-    ),
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_404_NOT_FOUND: HTTPError('The user does not exist'),
+        status.HTTP_403_FORBIDDEN: HTTPError('An admin cannot delete themselves'),
+    },
 )
-async def delete_user_id(
+async def delete_user(
     user_id: PathID, user_service: UserServiceDep, admin: AdminRoleDep
-) -> MessagedResponse:
-    """Deletes a user given an existing user ID
-
-    Arguments:
-        user_id {int} -- the ID of the user to be deleted
-        db {requires_db} -- a database session
-        admin {admin_required} -- an admin user, ensures the Admin isn't deleting
-        themselves
-    Returns:
-        ResponseMessage -- A message indicating the deletion was successful
+) -> None:
     """
-    await user_service.delete_by_id(user_id=user_id, admin_name=admin.username)
-    return MessagedResponse(message='User deleted', data={'user_id': user_id})
+    Deletes a user given it's ID
+
+    Parameters
+    ----------
+    user_id : PathID
+        _the ID of the user to delete_
 
 
-@user_router.get('/{user_id}/', response_model=UserResponse, responses=NotFound('user'))
-async def read_user_id(
+    Raises
+    ------
+    HTTPNotFound
+    HTTPForbidden
+    """
+    await user_service.delete_user(user_id=user_id, admin_name=admin.username)
+
+
+@user_router.get(
+    '/{user_id}/',
+    response_model=UserModel,
+    responses={status.HTTP_404_NOT_FOUND: HTTPError('The user does not exist')},
+)
+async def get_user(
     user_id: PathID, user_service: UserServiceDep, reader: CurrentUserDep
-) -> UserResponse:
-    """Reads a user with 'no read up' i.e a user cannot read a user with a
-    higher role / permission
-
-    Arguments:
-        user_id {int} -- the id of the user to read
-        db {requires_db} -- the database session
-        reader {role_required} -- the "reader" or user making the request
-
-    Raises:
-        HTTPNotFound: The user does not exist
-        HTTPForbidden: The user does not have permission to read the user
-
-    Returns:
-        UserResponse -- The user attempting to be read
-    """
-    user = await user_service.get_by_id(user_id)
-    if not user:
-        raise HTTPNotFound('User')
-
-    if not (reader.role >= user.role):
-        raise HTTPForbidden('Cannot read a user with higher permissions')
-
-    return UserResponse.convert(user)
+) -> UserModel:
+    return await user_service.get_user(user_id=user_id, current_user_role=reader.role)

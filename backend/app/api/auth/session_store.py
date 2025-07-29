@@ -1,8 +1,8 @@
 import json
 import secrets
 
-from app.core.security.cryptography import CryptoUtils
-from app.redis.client import redis_client
+from backend.core.security.cryptography import CryptoUtils
+from backend.redis.client import redis_client
 
 
 def session_key(key: str) -> str:

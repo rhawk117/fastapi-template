@@ -1,8 +1,9 @@
 from typing import Annotated
 
-from app.core.security.oauth_bearer import SessionIdDep
 from fastapi import Depends, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials
+
+from backend.core.security.oauth_bearer import SessionIdDep
 
 from .exceptions import HTTPInvalidSession, HTTPSessionRequired
 from .schema import ClientFingerprint, SessionData
@@ -62,9 +63,7 @@ async def validate_user_session(
 
 
 async def get_session_data(
-    client: FingerprintDep,
-    key: SessionIdDep,
-    session_service: SessionServiceDep
+    client: FingerprintDep, key: SessionIdDep, session_service: SessionServiceDep
 ) -> SessionData:
     """
     ### API Authentication

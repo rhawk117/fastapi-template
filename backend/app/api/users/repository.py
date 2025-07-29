@@ -1,130 +1,114 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from enum import StrEnum
-from typing import Any, NamedTuple
+from typing import NamedTuple, Sequence
 
-from sqlalchemy import Select, select
+from sqlalchemy import RowMapping, Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import MappedColumn
+from sqlalchemy.orm import InstrumentedAttribute, load_only
+from sqlalchemy.sql.base import ExecutableOption
 
 from backend.app.api.users.schema import (
-    UserDetailsModel,
-    UserDetailsPage,
+    UserAuthModel,
+    UserDetailsQueryParams,
     UserModel,
-    UserPage,
     UserQueryParams,
+    UserSortTypes,
 )
-from backend.common.model_repository import CRUDRepository
-from backend.utils import orm_utils
+from backend.common.interfaces import DatabaseRepository
+from backend.utils import pagination_utils
 
 from .model import Role, User
 
-
-class UserSorts(StrEnum):
-    USERNAME = 'username'
-    ROLE = 'role'
-
-
-class UserQueryResult(NamedTuple):
-    result: Sequence[Mapping]
+class Page(NamedTuple):
+    rows: Sequence[RowMapping]
     total: int
-
-
-class UserRepsitory(CRUDRepository[User]):
-    def __init__(self, db: AsyncSession) -> None:
-        super().__init__(User, db)
+class UserRepository(DatabaseRepository[User, int]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, User)
 
     @property
-    def model_view(self) -> Select:
-        return select(User.id, User.username, User.role, User.email)
+    def primary_key_column(self) -> InstrumentedAttribute[int]:
+        return User.id
 
-    async def get_by_id(self, user_id: int) -> UserModel | None:
-        statement = self.model_view.where(User.id == user_id)
-        row = await self.get_one(statement)
-        return UserModel.model_validate(row) if row else None
+    @property
+    def public_user(self) -> ExecutableOption:
+        return load_only(User.id, User.username, User.role, User.email)
 
-    async def get_by_username(self, username: str) -> UserModel | None:
-        statement = self.model_view.where(User.username == username)
-        row = await self.get_one(statement)
-        return UserModel.model_validate(row) if row else None
+    @property
+    def details_user(self) -> ExecutableOption:
+        return load_only(
+            User.id,
+            User.username,
+            User.role,
+            User.email,
+            User.created_at,
+            User.updated_at,
+        )
 
-    async def get_details_by_id(self, user_id: int) -> UserDetailsModel | None:
-        model = await self.get(User.id == user_id)
-        return UserDetailsModel.model_validate(model) if model else None
+    async def get_by_id(self, user_id: int) -> User | None:
+        user_orm = await self.get_by_pk(user_id)
+        return user_orm
 
-    async def select_models(
+    async def get_by_username(self, username: str) -> User | None:
+        user_orm = await self.get_first(where_clauses=[User.username == username])
+        return user_orm
+
+    async def username_taken(self, username: str) -> bool:
+        return await self.exists(where_clauses=[User.username == username])
+
+    async def email_taken(self, email: str) -> bool:
+        return await self.exists(where_clauses=[User.email == email])
+
+    async def get_by_email(self, email: str) -> User | None:
+        user_orm = await self.get_first(
+            where_clauses=[User.email == email],
+            load_options=[self.public_user]
+        )
+        return user_orm
+
+    def _prepare_user_query(
         self,
-        *,
         statement: Select,
-        params: UserQueryParams,
-        min_role: Role = Role.USER
-    ) -> orm_utils.PagedQuery:
-        ordered_by: MappedColumn = self.get_sort(
-            sort_order=params.sort_order,
-            column=params.sort_by
+        parameters: UserQueryParams,
+    ) -> Select:
+        if parameters.sort_by == UserSortTypes.USERNAME:
+            sort_columns = [User.username]
+        elif parameters.sort_by == UserSortTypes.EMAIL:
+            sort_columns = [User.email]
+
+        sort_columns = pagination_utils.get_sort_clauses(parameters, sort_columns)
+        statement = statement.order_by(*sort_columns)
+        return pagination_utils.add_pagination_params(statement, parameters)
+
+    async def get_page(
+        self, reader_permissions: Role, parameters: UserQueryParams
+    ) -> Page:
+        query = (
+            select(User)
+            .where(User.role < reader_permissions)
+            .options(self.public_user)
         )
-        statement = statement.where(User.role >= min_role).order_by(ordered_by)
+        total = await self.count(where_clauses=[User.role <= reader_permissions])
+        query = self._prepare_user_query(parameters=parameters, statement=query)
 
-        page_results = await orm_utils.get_page(
-            params.offset, params.limit, statement, db=self.db, model=User
-        )
+        results = await self.run(query)
+        rows = results.mappings().all()
+        return Page(rows=rows, total=total)
 
-        return page_results
+    async def get_details_page(
+        self, reader_permissions: Role, parameters: UserDetailsQueryParams
+    ) -> Page:
+        where_clauses = [User.role < reader_permissions]
 
-    async def get_user_page(
-        self,
-        current_user_role: Role,
-        params: UserQueryParams
-    ) -> UserPage:
-        base_statement = select(User.id, User.username, User.role, User.email)
-        query_result = await self.select_models(
-            statement=base_statement, params=params, min_role=current_user_role
-        )
-        models = [UserModel.model_validate(user) for user in query_result.result]
+        timestamp_clauses = pagination_utils.get_timestamp_clauses(parameters, User)
+        where_clauses.extend(timestamp_clauses)
 
-        return UserPage.from_results(
-            data=models,
-            total_items=query_result.total,
-            page_params=params,
-        )
+        query = select(User).where(*where_clauses)
 
-    async def get_user_detail_page(
-        self, current_user_role: Role, params: UserQueryParams
-    ) -> UserDetailsPage:
-        query_result = await self.select_models(
-            statement=select(User), params=params, min_role=current_user_role
-        )
-        models = [UserDetailsModel.model_validate(user) for user in query_result.result]
+        total = await self.count(where_clauses=where_clauses)
+        query = self._prepare_user_query(parameters=parameters, statement=query)
+        result = await self.run(query)
+        rows = result.mappings().all()
+        return Page(rows=rows, total=total)
 
-        return UserDetailsPage.from_results(
-            data=models,
-            total_items=query_result.total,
-            page_params=params,
-        )
-
-    async def username_exists(self, username: str) -> bool:
-        statement = select(User.id).where(User.username == username)
-        return await self.any(statement)
-
-    async def email_exists(self, email: str) -> bool:
-        statement = select(User.id).where(User.email == email)
-        return await self.any(statement)
-
-    async def delete_user_id(self, user_id: int) -> bool:
-        user = await self.get(User.id == user_id)
-        if not user:
-            return False
-
-        await self.delete(user)
-        return True
-
-    async def update_by_id(self, obj_in: dict[str, Any], id: int) -> UserModel | None:
-        statement = select(User).where(User.id == id)
-        user = await self.db.execute(statement)
-        user_instance = user.scalar_one_or_none()
-        if not user_instance:
-            return None
-
-        updated_user = await self.update(user_instance, obj_in)
-        return UserModel.model_validate(updated_user) if updated_user else None

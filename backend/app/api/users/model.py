@@ -15,7 +15,10 @@ class User(db.Base, AuditedMixin):
     id: Mapped[PrimaryKeyId] = mapped_column()
 
     username: Mapped[str] = mapped_column(
-        String(50), nullable=False, unique=True, index=True
+        String(50),
+        nullable=False,
+        unique=True,
+        index=True
     )
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.USER, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -38,3 +41,5 @@ class User(db.Base, AuditedMixin):
 
     def __repr__(self) -> str:
         return f'<User(id={self.id} username={self.username} role={self.role})>'
+
+

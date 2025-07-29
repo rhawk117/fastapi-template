@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 import time
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from .const import SESSION_EXPIRATION, SESSION_MAX_LIFETIME
-from .schema import ClientFingerprint, SessionData, SessionHealth, SessionInfo
+from .schema import SessionData, SessionHealth, SessionInfo
 from .session_store import SessionKeyStore
+
+if TYPE_CHECKING:
+    from backend.core.security.fingerprint import ClientFingerprint
 
 
 def has_expired(start_time: float, duration: float) -> bool:
@@ -27,10 +33,7 @@ class SessionService:
         self._session_store: SessionKeyStore = session_store
 
     async def assign_session(
-        self,
-        username: str,
-        role: str,
-        client: ClientFingerprint
+        self, username: str, role: str, client: ClientFingerprint
     ) -> str:
         """
         Creates a session key, encrypts the SessionData before storing it in redis and
@@ -64,9 +67,7 @@ class SessionService:
         return signed_key
 
     async def load_session(
-        self,
-        signed_key: str,
-        inbound_client: ClientFingerprint
+        self, signed_key: str, inbound_client: ClientFingerprint
     ) -> SessionData | None:
         """
         gets the session data from the signed_key from the client cookies and checks
@@ -150,13 +151,10 @@ class SessionService:
         return SessionInfo(owner=session_payload.identity, health=health)
 
     async def inspect_session_health(
-        self,
-        session_payload: SessionData,
-        signed_key: str
+        self, session_payload: SessionData, signed_key: str
     ) -> SessionHealth:
         next_exp_ms = await self._session_store.get_session_ttl(
-            signed_session_id=signed_key,
-            max_age=SESSION_MAX_LIFETIME
+            signed_session_id=signed_key, max_age=SESSION_MAX_LIFETIME
         )
         next_exp = time.time() + next_exp_ms
         max_age_exp_seconds = session_payload.created_at + SESSION_MAX_LIFETIME

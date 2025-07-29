@@ -1,30 +1,12 @@
 import math
+from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Generic, Self, TypeVar
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 from pydantic.types import NonNegativeInt, PositiveInt
 
-from .interface import CustomBaseModel
-
-S = TypeVar('S', bound=CustomBaseModel)
-
-
-class RequestSchema(CustomBaseModel):
-    """
-    The base schema and configuration for all request schemas.
-    """
-
-    model_config = ConfigDict(
-        extra='forbid', strict=True, str_strip_whitespace=True, validate_assignment=True
-    )
-
-
-class ResponseSchema(CustomBaseModel):
-    """
-    The base schema and configuration for all response schemas.
-    """
-
-    pass
+from backend.common.schemas import RequestSchema, ResponseSchema
 
 
 class PageParams(RequestSchema):
@@ -66,25 +48,62 @@ class PageParams(RequestSchema):
         return self.size
 
 
+class TimeStampParams(RequestSchema):
+    created_before: Annotated[
+        datetime | None,
+        Field(
+            default=None,
+            description='Filter items created before this date',
+        ),
+    ] = None
+
+    created_after: Annotated[
+        datetime | None,
+        Field(
+            default=None,
+            description='Filter items created after this date',
+        ),
+    ] = None
+
+    updated_before: Annotated[
+        datetime | None,
+        Field(
+            default=None,
+            description='Filter items updated before this date',
+        ),
+    ] = None
+
+    updated_after: Annotated[
+        datetime | None,
+        Field(
+            default=None,
+            description='Filter items updated after this date',
+        ),
+    ] = None
+
+
+class SortType(StrEnum):
+    asc = 'asc'
+    desc = 'desc'
+
+
+class SortOrderParams(RequestSchema):
+    sort_order: Annotated[
+        SortType,
+        Field(
+            default=SortType.asc,
+            description='The order to sort the items by (asc or desc)',
+        )
+    ]
+
+
 class PageMetadata(ResponseSchema):
     page_number: Annotated[int, PositiveInt, Field(description='Current page number')]
 
-    page_size: Annotated[
-        int,
-        PositiveInt,
-        Field(
-            description='Items per page',
-        ),
-    ]
+    page_size: Annotated[int, PositiveInt, Field(description='Items per page')]
 
     total_items: Annotated[
-        int,
-        NonNegativeInt,
-        Field(
-            description='Total number of items across all pages',
-            ge=0,
-            examples=[0, 150, 1000],
-        ),
+        int, NonNegativeInt, Field(description='Total number of items across all pages')
     ]
 
     total_pages: Annotated[int, PositiveInt, Field(description='Total number of pages')]
@@ -120,9 +139,6 @@ class PageMetadata(ResponseSchema):
         size: int,
         total_items: int,
     ) -> Self:
-        """
-        Create a PageMetadata instance with calculated pagination values.
-        """
         total_pages = math.ceil(total_items / size) if size > 0 else 0
         has_previous = page > 1
         has_next = page < total_pages
@@ -139,6 +155,9 @@ class PageMetadata(ResponseSchema):
         )
 
 
+S = TypeVar('S', bound=ResponseSchema)
+
+
 class PagedResponse(ResponseSchema, Generic[S]):
     """
     A paginated response schema that includes metadata and a list of items.
@@ -149,10 +168,7 @@ class PagedResponse(ResponseSchema, Generic[S]):
 
     @classmethod
     def from_results(
-        cls,
-        data: list[S],
-        page_params: PageParams,
-        total_items: int
+        cls, data: list[S], page_params: PageParams, total_items: int
     ) -> Self:
         metadata = PageMetadata.create(
             page=page_params.page_number,

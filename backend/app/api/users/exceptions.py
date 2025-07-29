@@ -1,4 +1,4 @@
-from app.common.http_exceptions import (
+from backend.common.http_exceptions import (
     BaseHTTPException,
     HTTPForbidden,
     HTTPNotFound,
@@ -19,14 +19,8 @@ class UsernameTaken(BaseHTTPException):
     def __init__(self) -> None:
         super().__init__(
             detail='Username is already taken',
-            status_code=422,+
+            status_code=422,
         )
-
-
-class DeleteSelfForbidden(HTTPForbidden):
-
-    def __init__(self) -> None:
-        super().__init__('You cannot delete yourself')
 
 
 class RoleNotAllowed(HTTPForbidden):
