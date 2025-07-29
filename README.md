@@ -32,7 +32,7 @@ Authentication differs from the traditional JWT Token apporach used in most Fast
 
 ### JWT Security Risks
 
-- **Session Hijacking**: JWTs are often stored in local storage or cookies, making them vulnerable to XSS attacks.
+- **Session Hijacking**: Once a JWT is compromised, an attacker can assume the identity of a user without authenticating
 - **Token Expiry**: JWTs typically have a fixed expiration time, which can lead to issues if the token is compromised before it expires.
 - **Revocation Difficulties**: Once a JWT is issued, it cannot be easily revoked, leading to potential security risks if a token is compromised.
 - **Algorithm Vulnerabilities**: JWTs are signed with a known list of algorithms, and once an attacker knows the algorithm, it becomes easier for them
