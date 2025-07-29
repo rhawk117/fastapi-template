@@ -1,7 +1,7 @@
 import dataclasses
 from pathlib import Path
 
-from app.common.types import LogLevelNames
+from backend.common.types import LogLevelNames
 
 
 @dataclasses.dataclass(slots=True, frozen=True, kw_only=True)
