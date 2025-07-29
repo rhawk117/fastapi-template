@@ -28,7 +28,7 @@ This template is a **work in progress** and not production ready yet, feel free 
 
 ## Authentication
 
-Authentication differs from the traditional JWT Token apporach used in most FastAPI tutorials for due the security and session highjacking risks.
+Authentication differs from the traditional JWT Token apporach used in most FastAPI tutorials due to the security and session highjacking risks.
 
 ### JWT Security Risks
 
