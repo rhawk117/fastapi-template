@@ -50,7 +50,7 @@ I noticed a lack of FastAPI support for comprehensive production grade Session I
 
 2. The response is then sent to the client which contains the Session ID in the response body, where your frontend can the store this in a cookie.
 
-### The client access a protected route
+### The client accesses a protected route
 
 1. The request is sent in the `Authorization` header with the value `Bearer <session_id>`.
 
