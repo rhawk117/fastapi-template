@@ -39,14 +39,6 @@ class AppConfig(BaseAppSettings):
         ),
     ]
 
-    CSRF_KEY: Annotated[
-        str,
-        Field(
-            default='csrf_key',
-            description='CSRF key for the application, used for CSRF protection',
-        ),
-    ]
-
     ENCRYPTION_KEY: Annotated[
         str,
         Field(
