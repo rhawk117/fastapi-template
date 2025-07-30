@@ -8,7 +8,7 @@ from backend.core.security.oauth_bearer import SessionIdDep
 from .exceptions import HTTPInvalidSession, HTTPSessionRequired
 from .schema import ClientFingerprint, SessionData
 from .service import SessionService
-from .session_store import SessionKeyStore
+from .repository import SessionKeyStore
 
 
 async def get_client_id(request: Request) -> ClientFingerprint:

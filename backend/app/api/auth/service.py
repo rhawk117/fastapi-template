@@ -5,8 +5,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from .const import SESSION_EXPIRATION, SESSION_MAX_LIFETIME
+from .repository import SessionRepository
 from .schema import SessionData, SessionHealth, SessionInfo
-from .session_store import SessionKeyStore
 
 if TYPE_CHECKING:
     from backend.core.security.fingerprint import ClientFingerprint
@@ -20,8 +20,8 @@ def has_expired(start_time: float, duration: float) -> bool:
 
 class SessionService:
     """
-    The SessionService is responsible for creating, storing, and retrieving API Keys
-    from the redis store. The Session Service is also responsible for checking if the
+    The SessionService is responsible for creating, storing, and retrieving Session IDs
+    from the redis repository. The Session Service is also responsible for checking if the
     Session ID has reached the maximum lifetime and revoking the API Key if it has been
     hijacked.
 
@@ -29,11 +29,15 @@ class SessionService:
     extended in redis
     """
 
-    def __init__(self, session_store: SessionKeyStore) -> None:
-        self._session_store: SessionKeyStore = session_store
+    def __init__(self, session_store: SessionRepository) -> None:
+        self._repository: SessionRepository = session_store
 
-    async def assign_session(
-        self, username: str, role: str, client: ClientFingerprint
+    async def create_session(
+        self,
+        *,
+        username: str,
+        role: str,
+        client: ClientFingerprint
     ) -> str:
         """
         Creates a session key, encrypts the SessionData before storing it in redis and
@@ -60,7 +64,7 @@ class SessionService:
         session_payload = SessionData.create(
             username=username, role=role, client=client
         )
-        signed_key = await self._session_store.create_and_store(
+        signed_key = await self._repository.register_session(
             payload=session_payload.model_dump(),
             ex=SESSION_EXPIRATION,  # NOTE: it's important that this is NOT the max age
         )
@@ -87,7 +91,7 @@ class SessionService:
         SessionData | None
         """
 
-        session_payload = await self._session_store.get_session(
+        session_payload = await self._repository.get_session(
             signed_key=signed_key, max_age=SESSION_MAX_LIFETIME
         )
         if not session_payload:
@@ -102,10 +106,10 @@ class SessionService:
         session_expired = has_expired(session_payload.created_at, SESSION_MAX_LIFETIME)
 
         if session_expired or session_highjacked:
-            await self._session_store.delete_session(signed_key, SESSION_MAX_LIFETIME)
+            await self._repository.delete_session(signed_key, SESSION_MAX_LIFETIME)
             return None
 
-        await self._session_store.extend_session(
+        await self._repository.extend_session(
             signed_key=signed_key,
             ex=SESSION_EXPIRATION,
             max_age=SESSION_MAX_LIFETIME,  # NOTE: this is the max age not the expiration
@@ -122,7 +126,7 @@ class SessionService:
         signed_key : str | None
         """
         if signed_key:
-            await self._session_store.delete_session(signed_key, SESSION_MAX_LIFETIME)
+            await self._repository.delete_session(signed_key, SESSION_MAX_LIFETIME)
 
     async def get_session_health(self, signed_key: str) -> SessionInfo | None:
         """
@@ -137,7 +141,7 @@ class SessionService:
         SessionInfo | None
             the session info if the key is valid, otherwise None
         """
-        session_dump = await self._session_store.get_session(
+        session_dump = await self._repository.get_session(
             signed_key, SESSION_MAX_LIFETIME
         )
         if not session_dump:
@@ -153,7 +157,7 @@ class SessionService:
     async def inspect_session_health(
         self, session_payload: SessionData, signed_key: str
     ) -> SessionHealth:
-        next_exp_ms = await self._session_store.get_session_ttl(
+        next_exp_ms = await self._repository.get_session_ttl(
             signed_session_id=signed_key, max_age=SESSION_MAX_LIFETIME
         )
         next_exp = time.time() + next_exp_ms

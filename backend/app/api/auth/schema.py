@@ -1,7 +1,9 @@
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Self
 
+from msgspec import field
 from pydantic import BaseModel, Field
 
 from backend.common.schemas import RequestSchema, ResponseSchema
@@ -9,13 +11,9 @@ from backend.common.types import AlphaString
 from backend.core.security.fingerprint import ClientFingerprint
 
 
-class LoginBody(RequestSchema):
-    username: Annotated[
-        AlphaString, Field(..., description='The username of the user to login')
-    ]
-    password: Annotated[
-        AlphaString, Field(..., description='The password of the user to login')
-    ]
+class LoginModel(RequestSchema):
+    username: Annotated[AlphaString, Field(..., description='The username of the user')]
+    password: Annotated[AlphaString, Field(..., description='The password of the user')]
 
 
 class SessionIdentity(ResponseSchema):
@@ -23,6 +21,13 @@ class SessionIdentity(ResponseSchema):
         str, Field(..., description='The username of the users session')
     ]
     role: Annotated[str, Field(..., description='The role of the user')]
+
+
+@dataclass(slots=True, kw_only=True)
+class SessionPayload:
+    identity: SessionIdentity
+    client: ClientFingerprint
+    created_at: float = field(default_factory=time.time)
 
 
 class SessionData(BaseModel):
@@ -63,7 +68,7 @@ class SessionData(BaseModel):
         return self.client == client
 
 
-class SessionResponse(ResponseSchema):
+class SessionModel(ResponseSchema):
     session_id: Annotated[
         str, Field(..., description='the signed API key to be issued to the client')
     ]
@@ -111,7 +116,7 @@ class SessionInfo(ResponseSchema):
     ]
 
 
-class LogoutResponse(ResponseSchema):
+class LogoutModel(ResponseSchema):
     """A model to represent the response after a successful logout"""
 
     message: Annotated[
