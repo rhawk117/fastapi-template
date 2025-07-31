@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import redis.asyncio
 
-if TYPE_CHECKING:
-    from fastapi_template.core.settings import RedisClientOptions, SecretSettings
+from fastapi_template.core import settings
 
 
-def _create_redis_client(
-    options: RedisClientOptions, secrets: SecretSettings
-) -> redis.asyncio.Redis:
+def _create_redis_client() -> redis.asyncio.Redis:
+    secrets = settings.get_secrets()
+    options = settings.get_config().redis_client
+
     connection_params = {
         'host': secrets.REDIS_HOST,
         'port': secrets.REDIS_PORT,
@@ -27,7 +25,10 @@ def _create_redis_client(
     return redis.asyncio.Redis(**connection_params)
 
 
-async def _ping_redis_connection(connection: redis.asyncio.Redis) -> None:
+_redis_client = _create_redis_client()
+
+
+async def connect_client(connection: redis.asyncio.Redis) -> None:
     try:
         await connection.ping()
     except redis.ConnectionError as e:
@@ -36,35 +37,23 @@ async def _ping_redis_connection(connection: redis.asyncio.Redis) -> None:
         raise RuntimeError('Redis connection timed out') from e
 
 
-class RedisClient:
-    _connection: redis.asyncio.Redis | None = None
-
-    @classmethod
-    async def connect(
-        cls, *, options: RedisClientOptions, secrets: SecretSettings
-    ) -> None:
-        if cls._connection:
-            raise RuntimeError('Redis client is already connected.')
-
-        cls._connection = _create_redis_client(options, secrets)
-        await _ping_redis_connection(cls._connection)
-
-    @classmethod
-    async def disconnect(cls) -> None:
-        if not cls._connection:
-            raise RuntimeError(
-                'Redis client is not connected, cannot disconnect client.'
-            )
-        try:
-            await cls._connection.close()
-        except redis.ConnectionError as e:
-            raise RuntimeError('Failed to disconnect from Redis') from e
-
-    @classmethod
-    async def get_client(cls) -> redis.asyncio.Redis:
-        if not cls._connection:
-            raise RuntimeError('Redis client is not connected.')
-        return cls._connection
+async def disconnect_client(connection: redis.asyncio.Redis) -> None:
+    try:
+        await connection.close()
+    except redis.ConnectionError as e:
+        raise RuntimeError('Failed to disconnect from Redis') from e
 
 
-__all__ = ['RedisClient']
+async def get_redis_client() -> redis.asyncio.Redis:
+    """
+    Returns the Redis client instance.
+
+    Raises
+    ------
+    RuntimeError
+        If the Redis client is not connected.
+    """
+    if not _redis_client:
+        raise RuntimeError('Redis client is not connected.')
+    return _redis_client
+

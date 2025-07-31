@@ -1,10 +1,6 @@
 import functools
 import hashlib
 import hmac
-import uuid
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import StrEnum
 from pathlib import Path
 
 import jwt
@@ -37,7 +33,7 @@ def _read_public_key() -> rsa.RSAPublicKey:
 
 
 @functools.lru_cache(maxsize=None)
-def _get_private_key(private_key_password: bytes | None = None) -> bytes:
+def get_private_key(private_key_password: bytes | None = None) -> bytes:
     return _read_private_key(private_key_password).private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
@@ -67,10 +63,10 @@ def encode_jwt_payload(token_payload: dict) -> str:
     -------
     str
     """
-    algorithm = settings.get_config_file().auth.jwt_algorithm
+    algorithm = settings.get_config().auth.jwt_algorithm
     return jwt.encode(
         token_payload,
-        _get_private_key(),
+        get_private_key(),
         algorithm=algorithm,
     )
 
@@ -95,7 +91,7 @@ def decode_jwt_payload(encoded_token: str) -> dict:
     jwt.DecodeError: If the token is invalid or expired.
     jwt.ExpiredSignatureError: If the token has expired.
     """
-    config = settings.get_config_file()
+    config = settings.get_config()
     return jwt.decode(
         encoded_token,
         get_public_key(),
@@ -113,7 +109,7 @@ def decode_jwt_payload(encoded_token: str) -> dict:
     )
 
 
-def hash_client_fingerprint(client_fingerprint: bytes) -> str:
+def create_fingerprint(client_fingerprint: bytes) -> str:
     """
     Hashes the client fingerprint using the JWT fingerprint secret.
 
@@ -133,9 +129,7 @@ def hash_client_fingerprint(client_fingerprint: bytes) -> str:
     ).hexdigest()
 
 
-def check_client_fingerprint(
-    client_fingerprint: bytes, expected_fingerprint: str
-) -> bool:
+def check_fingerprint(client_fingerprint: bytes, expected_fingerprint: str) -> bool:
     """
     Checks if the client fingerprint matches the expected fingerprint.
     Parameters
@@ -146,43 +140,5 @@ def check_client_fingerprint(
     -------
     bool
     """
-    actual_fingerprint = hash_client_fingerprint(client_fingerprint)
+    actual_fingerprint = create_fingerprint(client_fingerprint)
     return hmac.compare_digest(actual_fingerprint, expected_fingerprint)
-
-
-class TokenType(StrEnum):
-    """
-    Enum for the different types of tokens.
-    """
-
-    ACCESS = 'access'
-    REFRESH = 'refresh'
-
-
-@dataclass(slots=True, kw_only=True, frozen=True)
-class TokenClaim:
-    token_type: TokenType
-    jti: str
-    iat: int
-    exp: int
-    aud: str
-    iss: str
-
-
-def create_token_claim(token_type: TokenType) -> TokenClaim:
-    config = settings.get_config_file()
-    now = datetime.now(timezone.utc)
-
-    if token_type == TokenType.ACCESS:
-        expires_at = now + config.auth.access_token_exp
-    else:
-        expires_at = now + config.auth.refresh_token_exp
-
-    return TokenClaim(
-        token_type=token_type,
-        jti=str(uuid.uuid4()),
-        iat=int(now.timestamp()),
-        exp=int(expires_at.timestamp()),
-        aud=config.auth.jwt_audience,
-        iss=config.app.name,
-    )

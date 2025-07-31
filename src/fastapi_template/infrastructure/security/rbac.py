@@ -10,7 +10,12 @@ class UserRole(StrEnum):
 
 
 RoleLevelMap = MappingProxyType(
-    {UserRole.ADMIN: 3, UserRole.MODERATOR: 2, UserRole.USER: 1, UserRole.READ_ONLY: 0}
+    {
+        UserRole.ADMIN: 3,
+        UserRole.MODERATOR: 2,
+        UserRole.USER: 1,
+        UserRole.READ_ONLY: 0
+    }
 )
 
 

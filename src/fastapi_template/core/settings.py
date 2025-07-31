@@ -1,7 +1,33 @@
+import functools
 from pathlib import Path
 from typing import Literal
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    SettingsConfigDict,
+)
+
+from .config import (
+    AppSettings,
+    MiddlewareSettings,
+    RedisClientOptions,
+    SecuritySettings,
+    SQLAlchemyOptions,
+    TomlSettingsLoader,
+)
+
+
+class SettingsFile(TomlSettingsLoader):
+    """
+    The loaded static settings of the app
+    """
+
+    model_config = SettingsConfigDict(toml_file='settings.toml')
+    app: AppSettings
+    auth: SecuritySettings
+    middleware: MiddlewareSettings
+    sqlalchemy: SQLAlchemyOptions
+    redis_client: RedisClientOptions
 
 
 class _EnvSettings(BaseSettings):
@@ -54,3 +80,14 @@ class SecretSettings(_EnvSettings):
         if self.PRIVATE_KEY_PASSWORD:
             return self.PRIVATE_KEY_PASSWORD.encode('utf-8')
         return None
+
+
+@functools.lru_cache(maxsize=1)
+def get_config() -> SettingsFile:
+    return SettingsFile()  # type: ignore
+
+
+@functools.lru_cache(maxsize=1)
+def get_secrets() -> SecretSettings:
+    settings = get_config()
+    return SecretSettings(_env_file=settings.app.options.env_file)  # type: ignore

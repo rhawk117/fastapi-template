@@ -3,7 +3,7 @@ from typing import Annotated, NamedTuple
 from pydantic import Field
 
 from backend.common.types import AlphaString
-from fastapi_template.core.schema import CustomBaseModel, FixedLengthString
+from fastapi_template.core.pydantic import CustomBaseModel, FixedLengthString
 
 
 class TokenResponse(CustomBaseModel):
