@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import NamedTuple, Sequence
 
 from sqlalchemy import RowMapping, Select, select
@@ -9,9 +8,7 @@ from sqlalchemy.orm import InstrumentedAttribute, load_only
 from sqlalchemy.sql.base import ExecutableOption
 
 from backend.app.api.users.schema import (
-    UserAuthModel,
     UserDetailsQueryParams,
-    UserModel,
     UserQueryParams,
     UserSortTypes,
 )
@@ -20,9 +17,12 @@ from backend.utils import pagination_utils
 
 from .model import Role, User
 
+
 class Page(NamedTuple):
     rows: Sequence[RowMapping]
     total: int
+
+
 class UserRepository(DatabaseRepository[User, int]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, User)
@@ -85,9 +85,7 @@ class UserRepository(DatabaseRepository[User, int]):
         self, reader_permissions: Role, parameters: UserQueryParams
     ) -> Page:
         query = (
-            select(User)
-            .where(User.role < reader_permissions)
-            .options(self.public_user)
+            select(User).where(User.role < reader_permissions).options(self.public_user)
         )
         total = await self.count(where_clauses=[User.role <= reader_permissions])
         query = self._prepare_user_query(parameters=parameters, statement=query)
@@ -111,4 +109,3 @@ class UserRepository(DatabaseRepository[User, int]):
         result = await self.run(query)
         rows = result.mappings().all()
         return Page(rows=rows, total=total)
-

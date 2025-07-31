@@ -38,7 +38,8 @@ class UserService:
             return None
 
         if not CryptoUtils.verify_hash(
-            plain_text=password, hashed_text=user.password_hash
+            plain_text=password,
+            hashed_text=user.password_hash
         ):
             return None
 
@@ -108,7 +109,7 @@ class UserService:
         if await self.new_username_taken(update_req.username, existing_user.username):
             raise HTTPBadRequest('Username already taken.')
 
-        update_arguments = update_req.model_dump(exclude={'password'})
+        update_arguments = update_req.model_dump(exclude={'password'}, exclude_none=True)
         if not update_arguments and not update_req.password:
             raise HTTPBadRequest('No fields to update.')
 

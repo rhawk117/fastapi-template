@@ -6,9 +6,9 @@ from fastapi.security import HTTPAuthorizationCredentials
 from backend.core.security.oauth_bearer import SessionIdDep
 
 from .exceptions import HTTPInvalidSession, HTTPSessionRequired
+from .repository import SessionRepository
 from .schema import ClientFingerprint, SessionData
 from .service import SessionService
-from .repository import SessionKeyStore
 
 
 async def get_client_id(request: Request) -> ClientFingerprint:
@@ -19,7 +19,7 @@ FingerprintDep = Annotated[ClientFingerprint, Depends(get_client_id)]
 
 
 async def get_session_service() -> SessionService:
-    key_store = SessionKeyStore()
+    key_store = SessionRepository()
     return SessionService(session_store=key_store)
 
 

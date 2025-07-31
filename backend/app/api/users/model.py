@@ -23,6 +23,7 @@ class User(db.Base, AuditedMixin):
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.USER, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     email: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+
     @hybrid_property
     def role_level(self) -> int:  # type: ignore
         return Role.get_role_level(self.role)

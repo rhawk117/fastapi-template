@@ -64,17 +64,17 @@ class SessionService:
         session_payload = SessionData.create(
             username=username, role=role, client=client
         )
-        signed_key = await self._repository.register_session(
+        signed_session_id = await self._repository.register_session(
             payload=session_payload.model_dump(),
             ex=SESSION_EXPIRATION,  # NOTE: it's important that this is NOT the max age
         )
-        return signed_key
+        return signed_session_id
 
     async def load_session(
-        self, signed_key: str, inbound_client: ClientFingerprint
+        self, signed_session_id: str, inbound_client: ClientFingerprint
     ) -> SessionData | None:
         """
-        gets the session data from the signed_key from the client cookies and checks
+        gets the session data from the signed_session_id from the client cookies and checks
         if the max lifetime is reached, if it was issued by the server and exists in the
         redis session store. The API key if the max lifetime hasn't been reached refreshes
         the session expiration in the redis store
@@ -83,7 +83,7 @@ class SessionService:
 
         Parameters
         ----------
-        signed_key : str
+        signed_session_id : str
         inbound_client : ClientFingerprint
 
         Returns
@@ -92,7 +92,8 @@ class SessionService:
         """
 
         session_payload = await self._repository.get_session(
-            signed_key=signed_key, max_age=SESSION_MAX_LIFETIME
+            signed_session_id=signed_session_id,
+            max_age=SESSION_MAX_LIFETIME
         )
         if not session_payload:
             return None
@@ -106,35 +107,35 @@ class SessionService:
         session_expired = has_expired(session_payload.created_at, SESSION_MAX_LIFETIME)
 
         if session_expired or session_highjacked:
-            await self._repository.delete_session(signed_key, SESSION_MAX_LIFETIME)
+            await self._repository.delete_session(signed_session_id, SESSION_MAX_LIFETIME)
             return None
 
         await self._repository.extend_session(
-            signed_key=signed_key,
+            signed_session_id=signed_session_id,
             ex=SESSION_EXPIRATION,
             max_age=SESSION_MAX_LIFETIME,  # NOTE: this is the max age not the expiration
         )
 
         return session_payload
 
-    async def revoke(self, signed_key: str | None) -> None:
+    async def revoke(self, signed_session_id: str | None) -> None:
         """
         Revokes the session id by deleting it from the redis store
 
         Parameters
         ----------
-        signed_key : str | None
+        signed_session_id : str | None
         """
-        if signed_key:
-            await self._repository.delete_session(signed_key, SESSION_MAX_LIFETIME)
+        if signed_session_id:
+            await self._repository.delete_session(signed_session_id, SESSION_MAX_LIFETIME)
 
-    async def get_session_health(self, signed_key: str) -> SessionInfo | None:
+    async def get_session_health(self, signed_session_id: str) -> SessionInfo | None:
         """
         Gets the time to live of the api key in redis
 
         Parameters
         ----------
-        signed_key : str
+        signed_session_id : str
 
         Returns
         -------
@@ -142,7 +143,7 @@ class SessionService:
             the session info if the key is valid, otherwise None
         """
         session_dump = await self._repository.get_session(
-            signed_key, SESSION_MAX_LIFETIME
+            signed_session_id, SESSION_MAX_LIFETIME
         )
         if not session_dump:
             return None
@@ -151,14 +152,14 @@ class SessionService:
         except Exception:
             return None
 
-        health = await self.inspect_session_health(session_payload, signed_key)
+        health = await self.inspect_session_health(session_payload, signed_session_id)
         return SessionInfo(owner=session_payload.identity, health=health)
 
     async def inspect_session_health(
-        self, session_payload: SessionData, signed_key: str
+        self, session_payload: SessionData, signed_session_id: str
     ) -> SessionHealth:
         next_exp_ms = await self._repository.get_session_ttl(
-            signed_session_id=signed_key, max_age=SESSION_MAX_LIFETIME
+            signed_session_id=signed_session_id, max_age=SESSION_MAX_LIFETIME
         )
         next_exp = time.time() + next_exp_ms
         max_age_exp_seconds = session_payload.created_at + SESSION_MAX_LIFETIME

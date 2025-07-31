@@ -100,7 +100,7 @@ async def get_auth_context(
     session_id = session_auth.credentials
 
     session_health = await session_service.inspect_session_health(
-        session_payload=session_payload, signed_key=session_id
+        session_payload=session_payload, signed_session_id=session_id
     )
     return SessionContext(
         user=user,

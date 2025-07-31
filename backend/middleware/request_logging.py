@@ -24,7 +24,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         self.logger = logging.getLogger(__name__)
 
     async def dispatch(
-        self, request: Request,
+        self,
+        request: Request,
         call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         request_id = str(uuid.uuid4())

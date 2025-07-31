@@ -1,0 +1,56 @@
+[app]
+env_file = '.env'
+debug = true
+testing = true
+name = 'fastapi_template'
+description = 'This is a sample application configuration.'
+version = '0.1'
+
+[app.docs]
+enabled = true
+openapi_url = '/openapi.json'
+redoc_url = '/redoc'
+docs_url = '/docs'
+
+[logs]
+level = 'DEBUG'
+max_megabytes = 10
+retention_days = 7
+compression = 'gz'
+otel_enabled = false
+json_enabled = true
+
+[middleware]
+correlation_id_header = 'X-Request-ID'
+
+[middleware.cors]
+allow_origins = ['*']
+allow_credentials = true
+allow_methods = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']
+allow_headers = ['*']
+
+[auth]
+access_token_expire_minutes = 15
+refresh_token_expire_days = 1
+jwt_algorithm = 'RS256'
+redis_token_prefix = 'auth:token:'
+exclude_routes = [
+    '/auth/login',
+    '/auth/logout'
+]
+
+[sqlalchemy]
+pool_recycle = 3600
+pool_timeout = 30
+pool_size = 10
+max_overflow = 10
+pool_pre_ping = true
+pool_use_lifo = false
+echo = true
+
+
+[redis_client]
+socket_connect_timeout = 5.0
+socket_timeout = 5.0
+max_connections = 10
+health_check_interval = 30.0
