@@ -27,7 +27,7 @@ def _create_redis_client(
     return redis.asyncio.Redis(**connection_params)
 
 
-async def _open_redis_connection(connection: redis.asyncio.Redis) -> None:
+async def _ping_redis_connection(connection: redis.asyncio.Redis) -> None:
     try:
         await connection.ping()
     except redis.ConnectionError as e:
@@ -47,7 +47,7 @@ class RedisClient:
             raise RuntimeError('Redis client is already connected.')
 
         cls._connection = _create_redis_client(options, secrets)
-        await _open_redis_connection(cls._connection)
+        await _ping_redis_connection(cls._connection)
 
     @classmethod
     async def disconnect(cls) -> None:

@@ -35,7 +35,7 @@ class AppSettings(_TOMLSection):
     ]
     docs: AppDocsConfig
 
-    def get_docs_urls(self) -> dict[str, str | None]:
+    def get_docs_urls(self) -> dict:
         dumped = self.docs.model_dump(exclude={'enabled'})
         if not self.docs.enabled:
             return {url: None for url in dumped.keys()}
@@ -74,16 +74,18 @@ class AuthSettings(_TOMLSection):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 1
     jwt_algorithm: Literal['HS256', 'RS256'] = 'RS256'
+    jwt_issuer: str = 'fastapi-template'
+    jwt_audience: str = 'fastapi-template'
     redis_token_prefix: str = 'auth:tokens:'
     exclude_routes: list[str] = ['/api/auth/login', '/api/auth/register']
 
     @property
-    def access_token_exp(self) -> int:
-        return int(timedelta(minutes=self.access_token_expire_minutes).total_seconds())
+    def access_token_exp(self) -> timedelta:
+        return timedelta(minutes=self.access_token_expire_minutes)
 
     @property
-    def refresh_token_exp(self) -> int:
-        return int(timedelta(days=self.refresh_token_expire_days).total_seconds())
+    def refresh_token_exp(self) -> timedelta:
+        return timedelta(days=self.refresh_token_expire_days)
 
 
 class CrossOriginSettings(_TOMLSection):

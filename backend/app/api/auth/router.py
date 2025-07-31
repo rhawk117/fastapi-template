@@ -5,7 +5,7 @@ from app.api.users.service import UserService
 from fastapi import APIRouter, Body, status
 
 from backend.app.depends import DatabaseDepends
-from backend.common.http_exceptions import HTTPForbidden
+from fastapi_template.api.exceptions import HTTPForbidden
 from backend.utils.openapi_extra import HTTPError
 
 from .depends import FingerprintDep, SessionIdDep, SessionServiceDep

@@ -33,6 +33,8 @@ allow_headers = ['*']
 access_token_expire_minutes = 15
 refresh_token_expire_days = 1
 jwt_algorithm = 'RS256'
+jwt_issuer='fastapi_template'
+jwt_audience='example'
 redis_token_prefix = 'auth:token:'
 exclude_routes = [
     '/auth/login',

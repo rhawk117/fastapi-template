@@ -46,7 +46,7 @@ async def _begin_connection(async_engine: AsyncEngine) -> None:
     async with async_engine.begin() as conn:
         await _set_sqlite3_pragmas(conn)
 
-        from fastapi_template.domains import models  # noqa: F401, I001
+        from fastapi_template.domain import models  # noqa: F401, I001
 
         await conn.run_sync(MappedBase.metadata.create_all)
 

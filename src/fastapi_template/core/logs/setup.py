@@ -16,6 +16,7 @@ from . import const
 
 if TYPE_CHECKING:
     from fastapi_template.core.settings import LoggerSettings
+from typing import Callable, TypeVar, overload
 
 
 class LoguruIntercept(logging.Handler):
@@ -92,7 +93,7 @@ def setup_logging(settings: LoggerSettings) -> None:
         'retention': settings.retention,
         'compression': settings.compression,
         'enqueue': True,
-        'serialize': True
+        'serialize': True,
     }
 
     def is_uvicorn_access(record: Record) -> bool:
@@ -142,3 +143,14 @@ def setup_logging(settings: LoggerSettings) -> None:
         logger_factory=lambda *a, **kw: loguru_logger.bind(_struct=True, **kw),
         cache_logger_on_first_use=True,
     )
+
+
+T = TypeVar('T', bound=Callable[..., Any])
+
+
+@overload
+def get_struct_logger() -> structlog.BoundLoggerBase: ...
+@overload
+def get_struct_logger(name: str) -> structlog.BoundLoggerBase: ...
+def get_struct_logger(*args, **kwargs):
+    return structlog.get_logger(*args, **kwargs)

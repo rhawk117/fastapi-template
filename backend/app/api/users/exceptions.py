@@ -1,4 +1,4 @@
-from backend.common.http_exceptions import (
+from fastapi_template.api.exceptions import (
     BaseHTTPException,
     HTTPForbidden,
     HTTPNotFound,

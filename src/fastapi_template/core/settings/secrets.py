@@ -21,8 +21,12 @@ class SecretSettings(_EnvSettings):
     ENCRYPTION_SALT: str
 
     JWT_ALGORITHM: Literal['HS256', 'RS256']
+    JWT_FINGERPRINT_SECRET: str
+
+    PRIVATE_KEY_PASSWORD: str | None = None
     PRIVATE_KEY_FILE: str
     PUBLIC_KEY_FILE: str
+    BCRYPT_PEPPER: str | None = None
 
     DATABASE_URL: str
 
@@ -44,3 +48,9 @@ class SecretSettings(_EnvSettings):
 
     def public_key_path(self) -> Path:
         return self.__keys_dir / self.PUBLIC_KEY_FILE
+
+    @property
+    def private_key_password(self) -> bytes | None:
+        if self.PRIVATE_KEY_PASSWORD:
+            return self.PRIVATE_KEY_PASSWORD.encode('utf-8')
+        return None

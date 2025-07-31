@@ -1,4 +1,4 @@
-from backend.common.http_exceptions import HTTPForbidden, HTTPUnauthorized
+from fastapi_template.api.exceptions import HTTPForbidden, HTTPUnauthorized
 
 
 class HTTPInvalidCredentials(HTTPUnauthorized):
