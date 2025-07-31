@@ -1,21 +1,15 @@
 # repositories/base.py
 from __future__ import annotations
 
-import uuid
 from abc import ABC
-from typing import Any, Generic, Mapping, Protocol, Sequence, TypeVar
+from typing import Any, Generic, Mapping, Sequence, TypeVar
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload
 from sqlalchemy.sql import Select
 
-
-class _HasId(Protocol):
-    id: uuid.UUID | str | int
-
-
-_ModelT = TypeVar('_ModelT', bound=_HasId)
+_ModelT = TypeVar('_ModelT')
 _IDT = TypeVar('_IDT')
 
 
@@ -58,18 +52,18 @@ class SQLModelRepository(Generic[_ModelT, _IDT], ABC):
     async def create(self, obj_in: Mapping[str, Any]) -> _ModelT:
         obj = self.model(**obj_in)  # type: ignore[arg-type]
         self.session.add(obj)
-        await self.session.flush()
+        await self.session.commit()
         return obj
 
     async def update(self, obj: _ModelT, obj_in: Mapping[str, Any]) -> _ModelT:
         for k, v in obj_in.items():
             setattr(obj, k, v)
-        await self.session.flush()
+        await self.session.commit()
         return obj
 
     async def delete(self, obj: _ModelT) -> None:
         await self.session.delete(obj)
-        await self.session.flush()
+        await self.session.commit()
 
     async def count(self) -> int:
         q = select(func.count()).select_from(self.model)

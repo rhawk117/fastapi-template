@@ -86,13 +86,6 @@ def to_object(mapping: Mapping[str, Any], *, object_cls: type[object]) -> Any:
 class PageResult(NamedTuple):
     items: list[Mapping[str, Any]]
     total: int
-    limit: int
-    offset: int
-
-    @property
-    def next_offset(self) -> int | None:
-        nxt = self.offset + self.limit
-        return nxt if nxt < self.total else None
 
 
 class SQLMappedRepository(Generic[_ModelT, _IDT], ABC):
@@ -244,4 +237,22 @@ class SQLMappedRepository(Generic[_ModelT, _IDT], ABC):
         total = rows[0]['_full_count'] if rows else 0
         items = [{k: v for k, v in r.items() if k != '_full_count'} for r in rows]
 
-        return PageResult(items=items, total=total, limit=limit, offset=offset)  # type: ignore[no-any-return]
+        return PageResult(items=items, total=total)  # type: ignore[no-any-return]
+
+    async def first(
+        self,
+        *,
+        filters: Mapping[str, Any] | None = None,
+        where_clauses: Sequence[ColumnElement[Any]] | None = None,
+        include: set[str] | None = None,
+        exclude: set[str] | None = None,
+    ) -> Mapping[str, Any] | None:
+        stmt = self.select_columns(include=include, exclude=exclude).limit(1)
+        if filters:
+            stmt = stmt.filter_by(**filters)
+
+        if where_clauses:
+            stmt = stmt.where(*where_clauses)
+
+        res: Result = await self.session.execute(stmt)
+        return res.mappings().first()  # type: ignore[no-any-return]

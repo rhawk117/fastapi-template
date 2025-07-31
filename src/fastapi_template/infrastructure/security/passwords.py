@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from typing import Protocol
 
 from passlib.context import CryptContext
 from passlib.exc import MissingBackendError
@@ -19,6 +19,21 @@ def _apply_pepper(password: str) -> str:
 
 
 def hash_password(password: str) -> str:
+    """
+    hashes the password using bcrypt_sha26 algorithm.
+
+    Parameters
+    ----------
+    password : str
+
+    Returns
+    -------
+    str
+
+    Raises
+    ------
+    RuntimeError -- Missing required package
+    """
     try:
         return __pwd_context.hash(_apply_pepper(password))
     except MissingBackendError as e:
@@ -27,12 +42,29 @@ def hash_password(password: str) -> str:
         ) from e
 
 
+class StaleCallback(Protocol):
+    def __call__(self, new_hash: str) -> None: ...
+
+
 def check_password(
     *,
     plain_password: str,
     stored_hash: str,
-    on_stale: Callable[[str], None] | None = None,
+    on_stale: StaleCallback | None = None,
 ) -> bool:
+    """
+    Checks if the provided plain password matches the stored hash.
+
+    Parameters
+    ----------
+    plain_password : str
+    stored_hash : str
+    on_stale : StaleCallback | None, optional
+
+    Returns
+    -------
+    bool
+    """
     try:
         is_valid = __pwd_context.verify(_apply_pepper(plain_password), stored_hash)
     except MissingBackendError:

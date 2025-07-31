@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi_template.api.exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
+from fastapi_template.api.http_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from backend.core.security.cryptography import CryptoUtils
 from backend.core.security.rbac import Role
 

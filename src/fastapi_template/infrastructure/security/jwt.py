@@ -33,7 +33,7 @@ def _read_public_key() -> rsa.RSAPublicKey:
 
 
 @functools.lru_cache(maxsize=None)
-def get_private_key(private_key_password: bytes | None = None) -> bytes:
+def _get_private_key(private_key_password: bytes | None = None) -> bytes:
     return _read_private_key(private_key_password).private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
@@ -66,7 +66,7 @@ def encode_jwt_payload(token_payload: dict) -> str:
     algorithm = settings.get_config().auth.jwt_algorithm
     return jwt.encode(
         token_payload,
-        get_private_key(),
+        _get_private_key(),
         algorithm=algorithm,
     )
 

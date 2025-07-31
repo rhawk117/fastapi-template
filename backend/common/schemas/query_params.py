@@ -87,13 +87,25 @@ class SortType(StrEnum):
     desc = 'desc'
 
 
+class UserSorts(StrEnum):
+    USERNAME = 'username'
+    EMAIL = 'email'
+
+
 class SortOrderParams(RequestSchema):
-    sort_order: Annotated[
+    order: Annotated[
         SortType,
         Field(
             default=SortType.asc,
             description='The order to sort the items by (asc or desc)',
-        )
+        ),
+    ]
+    col: Annotated[
+        UserSorts,
+        Field(
+            default=UserSorts.USERNAME,
+            description='The field to sort the items by',
+        ),
     ]
 
 

@@ -35,9 +35,7 @@ class HTTPBadRequest(BaseHTTPException):
 
 class HTTPUnauthorized(BaseHTTPException):
     def __init__(
-        self,
-        detail: str = 'Unauthorized access',
-        headers: dict | None = None
+        self, detail: str = 'Unauthorized access', headers: dict | None = None
     ) -> None:
         super().__init__(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -7,5 +7,3 @@ AlphaString = Annotated[
 ]
 
 FixedLengthString = Annotated[str, StringConstraints(min_length=1, max_length=255)]
-
-
