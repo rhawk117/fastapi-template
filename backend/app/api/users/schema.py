@@ -54,6 +54,7 @@ class UserUpdateModel(RequestSchema):
     username: Annotated[str | None, Field(None)] = None
     password: Annotated[str | None, Field(None)] = None
     role: Annotated[Role | None, Field(None)] = None
+    
 
 
 class SessionContext(ResponseSchema):
