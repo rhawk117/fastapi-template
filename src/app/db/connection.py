@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from .base import MappedBase
 from .const import CONNECT_ARGS, SQLITE3_PRAGMAS
 from .settings import get_db_settings
 

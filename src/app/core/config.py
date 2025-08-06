@@ -7,7 +7,6 @@ from .settings import (
     AuthSettings,
     CrossOriginSettings,
     RedisOptions,
-    Settings,
     SqlAlchemyOptions,
     TomlConfigFile,
 )
@@ -22,10 +21,7 @@ class AppConfig(TomlConfigFile):
     sqlalchemy: SqlAlchemyOptions
     redis: RedisOptions
 
-class SecretSettings(Settings):
-    model_config = SettingsConfigDict(
-        secrets_dir='secrets'
-    )
+
 
 
 @functools.lru_cache
