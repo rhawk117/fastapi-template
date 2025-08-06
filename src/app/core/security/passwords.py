@@ -3,7 +3,7 @@ from typing import Protocol
 from passlib.context import CryptContext
 from passlib.exc import MissingBackendError
 
-from app.core.config import settings
+from app.core.settings import core
 
 __pwd_context = CryptContext(
     schemes=['bcrypt_sha26'],
@@ -14,7 +14,7 @@ __pwd_context = CryptContext(
 
 
 def _apply_pepper(password: str) -> str:
-    pepper = settings.get_secrets().BCRYPT_PEPPER
+    pepper = core.get_secrets().BCRYPT_PEPPER
     return f'{password}{pepper}'
 
 

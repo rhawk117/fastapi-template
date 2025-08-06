@@ -5,7 +5,7 @@ from .users import users_router
 
 api_router = APIRouter(
     prefix='/api',
-    tags=['API'],
+    tags=['api', 'root'],
     generate_unique_id_function=create_operation_id,
     responses={
         status.HTTP_422_UNPROCESSABLE_ENTITY: SchemaError(

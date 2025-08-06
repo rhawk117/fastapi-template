@@ -4,7 +4,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict
 
 
-def to_camel(string: str) -> str:
+def to_camel_case(string: str) -> str:
     words = string.split('_')
     new_name = []
     for i, word in enumerate(words):
@@ -37,10 +37,9 @@ class CustomBaseModel(BaseModel):
     )
 
 
-class HTTPModel(CustomBaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel
-    )
+
+class HttpModel(CustomBaseModel):
+
 
     def serialize(
         self,
@@ -60,3 +59,15 @@ class HTTPModel(CustomBaseModel):
             by_alias=by_alias,
             exclude=exclude,
         )
+
+    def dump(
+        self, *, exclude_none: bool = True, exclude: set[str] | None = None
+    ) -> dict:
+        return self.model_dump(
+            exclude_none=exclude_none,
+            exclude=exclude,
+        )
+
+
+class RequestModel(HttpModel):
+    model_config = ConfigDict(extra='forbid', strict=True)

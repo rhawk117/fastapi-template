@@ -1,9 +1,9 @@
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
-from app.core.exception_schema import (
-    HTTPErrorSchema,
-    HTTPValidationErrorSchema,
+from app.api.exception_schema import (
+    HttpErrorModel,
+    HttpValidationErrorModel,
 )
 
 # A descriptive wrappers for documenting API responses for better OpenAPI spec generation
@@ -29,7 +29,7 @@ def HTTPError(
     headers: dict | None = None,
 ) -> dict:
     if not model:
-        model = HTTPErrorSchema
+        model = HttpErrorModel
 
     return {
         'model': model,
@@ -45,7 +45,7 @@ def SchemaError(
     headers: dict | None = None,
 ) -> dict:
     if not model:
-        model = HTTPValidationErrorSchema
+        model = HttpValidationErrorModel
 
     return HTTPError(
         description=description,

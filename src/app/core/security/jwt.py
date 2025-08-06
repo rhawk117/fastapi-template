@@ -4,13 +4,13 @@ from typing import ClassVar, Protocol
 
 import jwt
 
-from app.core.config import settings
+from app.core.settings import core
 
 from ._keys import AsymmetricKeyPair
 
 
 def _create_asymmetric_keys() -> AsymmetricKeyPair:
-    secrets = settings.get_secrets()
+    secrets = core.get_secrets()
     return AsymmetricKeyPair.from_files(
         private_key_file=secrets.private_key_path(),
         public_key_file=secrets.public_key_path(),
@@ -24,7 +24,7 @@ class Fingerprint(Protocol):
 
 class _JWTSecurity:
     _jwt_keys: ClassVar[AsymmetricKeyPair] = _create_asymmetric_keys()
-    _alogrithm: ClassVar[str] = settings.get_secrets().JWT_ALGORITHM
+    _alogrithm: ClassVar[str] = core.get_secrets().JWT_ALGORITHM
 
     @classmethod
     def get_public_key(cls) -> bytes:
@@ -75,7 +75,7 @@ class _JWTSecurity:
         jwt.DecodeError: If the token is invalid or expired.
         jwt.ExpiredSignatureError: If the token has expired.
         """
-        config = settings.get_config()
+        config = core.get_config()
         return jwt.decode(
             encoded_token,
             cls._jwt_keys.public_key,
@@ -107,7 +107,7 @@ class _JWTSecurity:
         """
         enocded_fingerprint = client_fingerprint.stringify().encode()
 
-        secret = settings.get_secrets().JWT_FINGERPRINT_SECRET
+        secret = core.get_secrets().JWT_FINGERPRINT_SECRET
         return hmac.new(
             secret.encode('utf-8'),
             enocded_fingerprint,

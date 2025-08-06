@@ -4,7 +4,7 @@ from urllib.parse import quote_plus
 
 import redis.asyncio
 
-from app.core.config import settings
+from app.core.settings import core
 
 
 def create_redis_url(
@@ -39,8 +39,8 @@ def create_redis_url(
 
 class RedisClient:
     def __init__(self) -> None:
-        client_options = settings.get_config().redis_client
-        secrets = settings.get_secrets()
+        client_options = core.get_config().redis_client
+        secrets = core.get_secrets()
         self._url = create_redis_url(
             host=secrets.REDIS_HOST,
             port=secrets.REDIS_PORT,

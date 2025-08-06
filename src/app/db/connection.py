@@ -12,20 +12,17 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import settings
-
-from . import const
-from .base import MappedBase
+from .const import CONNECT_ARGS, SQLITE3_PRAGMAS
+from .settings import get_db_settings
 
 
 def _create_sqlalchemy_engine() -> AsyncEngine:
-    secrets = settings.get_secrets()
-    options = settings.get_config().sqlalchemy
+    db_settings = get_db_settings()
 
     return create_async_engine(
-        url=secrets.DATABASE_URL,
-        connection_args=const.CONNECT_ARGS,
-        **options.model_dump(exclude_none=True),
+        url=db_settings.url,
+        connection_args=CONNECT_ARGS,
+        **db_settings.engine_args,
     )
 
 
@@ -36,7 +33,7 @@ _AsyncSessionLocal = async_sessionmaker(
 
 
 async def _set_sqlite3_pragmas(connection: AsyncConnection) -> None:
-    for pragma, value in const.SQLITE3_PRAGMAS.items():
+    for pragma, value in SQLITE3_PRAGMAS.items():
         await connection.execute(text(f'PRAGMA {pragma} = {value}'))
 
 

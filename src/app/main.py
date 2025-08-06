@@ -5,9 +5,9 @@ from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core import log
-from app.core.config import settings
 from app.api.response_class import MsgspecJSONResponse
+from app.core import log
+from app.core.settings import core
 from app.db.connection import connect_db, disconnect_db
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.redis.client import redis_client
@@ -32,7 +32,7 @@ async def asgi_lifespan(app: FastAPI):
 
 
 def register_middleware(app: FastAPI) -> None:
-    mw_config = settings.get_config().middleware
+    mw_config = core.get_config().middleware
 
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(CorrelationIdMiddleware, header_name='X-Request-ID')
@@ -48,7 +48,7 @@ def register_middleware(app: FastAPI) -> None:
 
 
 def create_app() -> FastAPI:
-    config = settings.get_config()
+    config = core.get_config()
 
     log.configure_logger('INFO')
     log.configure_file_loggers(

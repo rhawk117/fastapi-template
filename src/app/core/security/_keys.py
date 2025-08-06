@@ -10,17 +10,23 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 def read_file_bytes(file_path: Path) -> bytes:
     if not file_path.exists():
         raise FileNotFoundError(f'Key file {file_path} does not exist.')
+
     with file_path.open('rb') as key_file:
         return key_file.read()
 
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class AsymmetricKeyPair:
+    """
+    Represents an asymmetric key pair (private and public keys)
+    with cached single computed properties for the keys.
+    """
+
     _private_key: rsa.RSAPrivateKey
     _public_key: rsa.RSAPublicKey
 
     @classmethod
-    def from_files(
+    def from_key_files(
         cls,
         private_key_file: Path,
         public_key_file: Path,
