@@ -1,68 +1,76 @@
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.response_class import MsgspecJSONResponse
-from app.core import log
-from app.core.settings import core
-from app.db.connection import connect_db, disconnect_db
-from app.middleware.request_logging import RequestLoggingMiddleware
-from app.redis.client import redis_client
+from app.api import middleware
+from app.core import settings
+from app.infrastructure import db, log, redis
 
-logger = logging.getLogger(__name__)
+# NOTE: in both on_startup, on_shutdown the app instance must be included
+# even if it is not used to match method signature
 
 
 @asynccontextmanager
-async def asgi_lifespan(app: FastAPI):
-    logger.info('ASGI Lifespan started')
-    await connect_db()
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Defines what should happen when the app first starts and when it shuts down
+    the app start routine is before the "yield" and the shutdown routine is after the "yield"
 
-    logger.info('Connected to the database, initializing Redis client')
-    await redis_client.connect()
-    logger.info('Redis client connected, app startup complete')
+    Arguments:
+        app {FastAPI} -- the app instance, required even if not used
+    """
+
+    await db.connect_db()
+    await redis.ping_redis_client()
+
+    # ^ app startup
 
     yield
-    logger.info('ASGI Lifespan shutdown started, disconnecting from database and Redis')
-    await disconnect_db()
-    logger.info('Disconnected from the database')
-    await redis_client.disconnect()
 
+    # v app shutdown
 
-def register_middleware(app: FastAPI) -> None:
-    mw_config = core.get_config().middleware
-
-    app.add_middleware(RequestLoggingMiddleware)
-    app.add_middleware(CorrelationIdMiddleware, header_name='X-Request-ID')
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=mw_config.cors.allow_origins,
-        allow_credentials=mw_config.cors.allow_credentials,
-        allow_methods=mw_config.cors.allow_methods,
-        allow_headers=mw_config.cors.allow_headers,
-    )
-
-    logger.info('Middleware registered successfully')
+    await db.disconnect_db()
+    await redis.close_redis_connection()
 
 
 def create_app() -> FastAPI:
-    config = core.get_config()
+    """
+    Creates the FastAPI instance and returns the
+    created app instance.
 
-    log.configure_logger('INFO')
-    log.configure_file_loggers(
-        app_level='INFO',
-        access_level='INFO',
-        error_level='WARNING'
-    )
-
+    Returns:
+        FastAPI -- the API instance
+    """
+    log.setup_logging()
+    config = settings.get_app_settings()
+    logger = logging.getLogger(__name__)
     app = FastAPI(
-        **config.app.fastapi_kwargs,
-        lifespan=asgi_lifespan,
-        response_class=MsgspecJSONResponse,
+        title=config.openapi.title,
+        version=config.openapi.version,
+        description=config.openapi.description,
+        debug=config.debug,
+        lifespan=lifespan,
+        openapi_url=config.docs.openapi_url,
+        docs_url=config.docs.docs_url,
+        redoc_url=config.docs.redoc_url,
     )
+    if app.debug:
+        logger.warning('Debug mode is enabled, disable in production.')
 
-    register_middleware(app)
+    if not config.docs.allow_docs:
+        app.openapi_url = None
+        app.docs_url = None
+        app.redoc_url = None
+        logger.info('OpenAPI documentation is disabled.')
+    else:
+        logger.info('Documentation routes enabled, disable in production.')
 
+    logger.info('App instance created, registering middleware and exception handlers.')
+    middleware.register_middleware(app)
+    logger.info('Middleware initialized, adding API routes.')
+
+    # app.include_router(api_router)
+
+    logger.info('API routes registered successfully, app build successful.')
     return app

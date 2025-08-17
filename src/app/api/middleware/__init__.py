@@ -1,15 +1,3 @@
+from .register import register_middleware  # noqa: F401
 
-
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from asgi_correlation_id import CorrelationIdMiddleware
-
-
-
-def register_middleware(app: FastAPI) -> None:
-
-    MIDDLEWARE = [
-        CorrelationIdMiddleware,
-        CORSMiddleware
-    ]
+__all__ = ['register_middleware']

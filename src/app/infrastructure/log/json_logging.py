@@ -1,10 +1,11 @@
+from __future__ import annotations
 import atexit
 import functools
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from core import path_utils
+from app.core import path_utils
 
 from .settings import log_settings
 from .utils import get_loguru_logger, inject_asgi_correlation_id
