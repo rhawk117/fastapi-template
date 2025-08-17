@@ -113,10 +113,7 @@ class _JwtManager:
         }
 
     def create_jwt_payload(
-        self,
-        user_id: str,
-        token_type: TokenType,
-        **kwargs
+        self, user_id: str, token_type: TokenType, **kwargs
     ) -> JwtPayload:
         now = current_time()
         jti = create_jti()
@@ -149,7 +146,7 @@ class _JwtManager:
 
         return JwtToken(
             token=self.encode(payload_dict),
-            payload=payload, 
+            payload=payload,
         )
 
     def encode(self, payload: dict) -> str:
