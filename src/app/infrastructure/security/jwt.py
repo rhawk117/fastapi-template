@@ -1,14 +1,20 @@
-import hashlib
-import hmac
+from datetime import datetime, UTC
+import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from pydantic import Field, ConfigDict, BaseModel, field_validator
 from enum import StrEnum
-from typing import Any, NamedTuple, Protocol, Self
+from typing import Annotated, Final, NamedTuple, TypedDict
+import time
+from .settings import jwt_settings, get_crypto_settings
+from jose import jwt, JWTError
+from jose.exceptions import ExpiredSignatureError, JWTClaimsError
 
-import jwt
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.core.settings import AuthSettings, CryptographySecrets
+class SessionStatus(StrEnum):
+    ACTIVE = 'active'
+    EXPIRED = 'expired'
+    REVOKED = 'revoked'
+    LOCKED = 'locked'
 
 
 class TokenType(StrEnum):
@@ -17,264 +23,252 @@ class TokenType(StrEnum):
 
 
 class JwtPayload(BaseModel):
-    """Comprehensive JWT payload model with all standard claims."""
-
     model_config = ConfigDict(
+        frozen=True,
         str_strip_whitespace=True,
-        use_enum_values=True,
-        populate_by_name=True,
+        validate_assignment=True,
     )
 
-    # (RFC 7519)
-    sub: str = Field(..., description='Subject (user identifier)')
-
-    iat: datetime = Field(..., description='Issued at time')
-
-    exp: datetime = Field(..., description='Expiration time')
-
-    nbf: datetime | None = Field(default=None, description='Not before time')
-
-    iss: str = Field(..., description='Issuer')
-
-    aud: list[str] = Field(..., description='Audience')
-
-    jti: str = Field(
-        ...,
-        description='JWT ID for token revocation',
+    sub: Annotated[str, Field(description='Subject (user ID)', min_length=1)]
+    jti: Annotated[str, Field(description='JWT ID', min_length=1)]
+    iat: Annotated[int, Field(description='Issued at timestamp', ge=0)]
+    exp: Annotated[int, Field(description='Expiration timestamp', ge=0)]
+    iss: Annotated[str, Field(description='Issuer', min_length=1)]
+    aud: Annotated[str, Field(description='Audience', min_length=1)]
+    token_type: Annotated[TokenType, Field(description='Token type')]
+    extras: dict = Field(
+        default_factory=dict,
+        description='Additional claims or data',
     )
 
-    token_type: TokenType = Field(
-        ...,
-        description='Type of the token (access, refresh, email)',
-    )
 
-    fingerprint: str = Field(
-        ...,
-        description='Fingerprint hash of the user or device',
-    )
+def current_time() -> int:
+    return int(datetime.now(UTC).timestamp())
 
-    @field_validator('exp', 'nbf', mode='before')
-    @classmethod
-    def parse_timestamp(cls, v: int | float | datetime) -> datetime:
-        if isinstance(v, (int, float)):
-            return datetime.fromtimestamp(v, tz=timezone.utc)
-        return v
 
-    @model_validator(mode='after')
-    def validate_temporal_claims(self) -> Self:
-        if self.nbf and self.nbf > self.exp:
-            raise ValueError("'nbf' must be before 'exp'")
-
-        if self.iat > self.exp:
-            raise ValueError("'iat' must be before 'exp'")
-
-        return self
-
-    def dump(self) -> dict[str, Any]:
-        data = self.model_dump(exclude_none=True, mode='json')
-
-        for field in ['iat', 'exp', 'nbf']:
-            if field in data and data[field]:
-                data[field] = int(datetime.fromisoformat(data[field]).timestamp())
-
-        return data
-
-    @classmethod
-    def load(cls, data: dict[str, Any]) -> Self:
-        for field in ['iat', 'exp', 'nbf']:
-            if field in data and isinstance(data[field], (int, float)):
-                data[field] = datetime.fromtimestamp(data[field], tz=timezone.utc)
-
-        return cls(**data)
+def create_jti() -> str:
+    return str(uuid.uuid4())
 
 
 class JwtToken(NamedTuple):
+    token: str
     payload: JwtPayload
-    encoded: str
 
 
-class Fingerprintable(Protocol):
-    def stringify(self) -> str: ...
+class JwtErrorCodes(StrEnum):
+    MALFORM_TOKEN = 'malformed_token'
+    EXPIRED_TOKEN = 'expired_token'
+    INVALID_CLAIMS = 'invalid_signature'
+    UNKNOWN_TOKEN_TYPE = 'unknown_token_type'
+    WRONG_TOKEN_TYPE = 'wrong_token_type'
+    INVALID_PAYLOAD = 'invalid_payload'
 
 
-class JwtClaimsService:
-    def __init__(self, auth_settings: AuthSettings) -> None:
-        self._auth_settings: AuthSettings = auth_settings
+class BadJWTError(Exception):
+    """Base class for JWT errors."""
 
-    def get_token_type_exp(self, token_type: TokenType) -> timedelta:
+    def __init__(
+        self, error_code: JwtErrorCodes, message: str, *, expired: bool = False
+    ) -> None:
+        self.error_code = error_code
+        self.message = message
+        self.expired = expired
+        super().__init__(message)
+
+
+class DecodedJwtResult(TypedDict):
+    success: bool
+    error_code: JwtErrorCodes | None
+    message: str | None
+    claim: JwtPayload | None
+
+
+class _JwtManager:
+    def __init__(self) -> None:
+        self.secret_key: str = get_crypto_settings().SECRET_KEY
+        self.algorithm: str = jwt_settings.algorithm
+        self.issuer: str = jwt_settings.issuer
+        self.audience: str = jwt_settings.audience
+
+    def get_token_exp(self, token_type: TokenType) -> int:
         if token_type == TokenType.ACCESS:
-            return self._auth_settings.access_token_exp
+            return jwt_settings.access_token_exp
         elif token_type == TokenType.REFRESH:
-            return self._auth_settings.refresh_token_exp
+            return jwt_settings.refresh_token_exp
         else:
             raise ValueError(f'Unknown token type: {token_type}')
 
-    def create_claim(
+    @property
+    def decoding_options(self) -> dict:
+        return {
+            'verify_signature': True,
+            'verify_exp': True,
+            'verify_iat': True,
+            'verify_iss': True,
+            'verify_aud': True,
+            'require_exp': True,
+            'require_iat': True,
+            'require_iss': True,
+            'require_aud': True,
+        }
+
+    def create_jwt_payload(
         self,
+        user_id: str,
         token_type: TokenType,
-        *,
-        fingerprint_hash: str,
-        subject: str,
+        **kwargs
     ) -> JwtPayload:
-        now = datetime.now(timezone.utc)
+        now = current_time()
+        jti = create_jti()
+        expires = now + self.get_token_exp(token_type)
 
-        exp = now + self.get_token_type_exp(token_type)
-
-        jti = str(uuid.uuid4())
-
-        payload = JwtPayload(
-            sub=subject,
-            iat=now,
-            exp=exp,
-            iss=self._auth_settings.jwt_issuer,
-            aud=[self._auth_settings.jwt_audience],
+        return JwtPayload(
+            sub=user_id,
             jti=jti,
+            iat=now,
+            exp=expires,
+            iss=self.issuer,
+            aud=self.audience,
             token_type=token_type,
-            fingerprint=fingerprint_hash,
+            extras=kwargs,
         )
-
-        return payload
-
-
-class JwtService:
-    def __init__(
-        self,
-        *,
-        crypto: CryptographySecrets,
-        auth_settings: AuthSettings,
-    ) -> None:
-        self._crypto: CryptographySecrets = crypto
-        self._settings: AuthSettings = auth_settings
-        self._claims_maker: JwtClaimsService = JwtClaimsService(auth_settings)
-
-    @property
-    def _private_key(self) -> str:
-        return self._crypto.rsa.private_key.get_secret_value()
-
-    @property
-    def public_key(self) -> str:
-        return self._crypto.rsa.public_key.get_secret_value()
-
-    @property
-    def _jwt_fingerprint_secret(self) -> str:
-        return self._crypto.jwt_fingerprint_secret.get_secret_value()
-
-    @property
-    def _fingerprint_secret(self) -> str:
-        return self._crypto.jwt_fingerprint_secret.get_secret_value()
-
-    def hash_fingerprint(self, fingerprintable: Fingerprintable) -> str:
-        encoded_fingerprint = fingerprintable.stringify().encode('utf-8')
-        secret = self._fingerprint_secret.encode('utf-8')
-        return hmac.new(
-            secret,
-            encoded_fingerprint,
-            hashlib.sha256,
-        ).hexdigest()
-
-    def check_fingerprint(
-        self,
-        *,
-        client_fingerprint: Fingerprintable,
-        token_payload: dict[str, Any]
-    ) -> bool:
-        claim_fingerprint = token_payload.get('fingerprint')
-        if not claim_fingerprint:
-            return False
-
-        expected_fingerprint = self.hash_fingerprint(client_fingerprint)
-        return hmac.compare_digest(expected_fingerprint, claim_fingerprint)
 
     def create_token(
         self,
+        user_id: str,
+        session_id: str,
+        *,
         token_type: TokenType,
-        *,
-        fingerprint: Fingerprintable,
-        subject: str,
+        **kwargs,
     ) -> JwtToken:
-        fingerprint_hash = self.hash_fingerprint(fingerprint)
-        claims = self._claims_maker.create_claim(
-            token_type=token_type,
-            fingerprint_hash=fingerprint_hash,
-            subject=subject,
+        payload = self.create_jwt_payload(
+            user_id=user_id, session_id=session_id, token_type=token_type, **kwargs
         )
 
-        token_dump = claims.dump()
+        payload_dict = payload.model_dump(mode='json')
 
-        encoded_jwt = jwt.encode(
-            token_dump,
-            self._private_key,
-            algorithm=self._settings.jwt_algorithm,
+        return JwtToken(
+            token=self.encode(payload_dict),
+            payload=payload, 
         )
 
-        return JwtToken(payload=claims, encoded=encoded_jwt)
+    def encode(self, payload: dict) -> str:
+        return jwt.encode(
+            payload,
+            self.secret_key,
+            algorithm=self.algorithm,
+        )
 
-    def _validate_jwt(
-        self,
-        expected_type: TokenType,
-        client_fingerprint: Fingerprintable,
-        decoded_jwt: dict[str, Any],
-    ) -> JwtPayload | None:
-        if decoded_jwt.get('token_type') != expected_type:
-            return None
+    def _decode_fail(self, error_code: JwtErrorCodes, message: str) -> DecodedJwtResult:
+        return {
+            'success': False,
+            'error_code': error_code,
+            'message': message,
+            'claim': None,
+        }
 
-        if not self.check_fingerprint(
-            client_fingerprint=client_fingerprint,
-            token_payload=decoded_jwt,
-        ):
-            return None
+    def decode_token(
+        self, encoded_token: str, *, token_type: TokenType
+    ) -> DecodedJwtResult:
+        """
+        Decodes a JWT token and returns a JwtPayload instance.
 
-        return self.try_load_payload(decoded_jwt)
+        Parameters
+        ----------
+        encoded_token : str
 
-    def decode_jwt(
-        self, encoded_jwt: str, *, verify_exp: bool = True
-    ) -> dict[str, Any] | None:
+        Returns
+        -------
+        JwtPayload
+
+        Raises
+        ------
+        BadJWTError
+            _when the token is malformed, expired, or has invalid claims_
+        """
         try:
-            decoded_jwt = jwt.decode(
-                encoded_jwt,
-                self.public_key,
-                algorithms=[self._settings.jwt_algorithm],
-                options={
-                    'verify_exp': verify_exp,
-                    'verify_iat': True,
-                    'verify_nbf': True,
-                    'require_exp': True,
-                    'require_iat': True,
-                    'require_sub': True,
-                },
+            paylod_dict = jwt.decode(
+                encoded_token,
+                self.secret_key,
+                algorithms=[self.algorithm],
+                issuer=self.issuer,
+                audience=self.audience,
+                options=self.decoding_options,
             )
-        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
-            return None
+        except ExpiredSignatureError:
+            return self._decode_fail(
+                JwtErrorCodes.EXPIRED_TOKEN,
+                'Token has expired',
+            )
+        except JWTClaimsError as exc:
+            return self._decode_fail(
+                JwtErrorCodes.INVALID_CLAIMS,
+                f'Invalid claims: {exc}',
+            )
+        except JWTError as exc:
+            return self._decode_fail(
+                JwtErrorCodes.MALFORM_TOKEN,
+                f'Malformed token: {exc}',
+            )
 
-        return decoded_jwt
-
-    def try_load_payload(self, data: dict[str, Any]) -> JwtPayload | None:
         try:
-            return JwtPayload.load(data)
-        except ValueError:
+            decoded_type = TokenType(paylod_dict.get('token_type'))
+            if decoded_type is None or decoded_type not in (
+                TokenType.ACCESS,
+                TokenType.REFRESH,
+            ):
+                return self._decode_fail(
+                    JwtErrorCodes.UNKNOWN_TOKEN_TYPE,
+                    f'Unknown token type: {token_type}',
+                )
+
+            if decoded_type != token_type:
+                return self._decode_fail(
+                    JwtErrorCodes.WRONG_TOKEN_TYPE,
+                    f'Expected token type {token_type}, got {decoded_type}',
+                )
+            claim = JwtPayload.model_validate(paylod_dict)
+
+        except Exception:
+            return self._decode_fail(
+                JwtErrorCodes.INVALID_PAYLOAD,
+                'Invalid token payload',
+            )
+
+        return {
+            'success': True,
+            'error_code': None,
+            'message': None,
+            'claim': claim,
+        }
+
+    def extract_jti(self, encoded_token: str) -> str | None:
+        try:
+            unverified_payload = jwt.get_unverified_claims(encoded_token)
+            return unverified_payload.get('jti')
+        except JWTError:
             return None
 
-    def load_jwt(
-        self,
-        encoded_jwt: str,
-        client_fingerprint: Fingerprintable,
-        *,
-        expected_type: TokenType,
-        verify_exp: bool = True,
-    ) -> JwtPayload | None:
-        decoded_jwt = self.decode_jwt(encoded_jwt, verify_exp=verify_exp)
-        if not decoded_jwt:
-            return None
+    def has_token_expired(self, encoded_token: str) -> bool:
+        """
+        Checks if the token has expired.
 
-        return self._validate_jwt(
-            expected_type=expected_type,
-            client_fingerprint=client_fingerprint,
-            decoded_jwt=decoded_jwt,
-        )
+        Parameters
+        ----------
+        encoded_token : str
+
+        Returns
+        -------
+        bool
+            True if the token has expired, False otherwise.
+        """
+        try:
+            unverified_payload = jwt.get_unverified_claims(encoded_token)
+            if not (exp := unverified_payload.get('exp')):
+                return True
+            return current_time() > exp
+        except BadJWTError:
+            return True
 
 
-async def get_jwt_service(
-    crypto: CryptographySecrets,
-    auth_settings: AuthSettings,
-) -> JwtService:
-    return JwtService(crypto=crypto, auth_settings=auth_settings)
+JwtManager: Final[_JwtManager] = _JwtManager()
