@@ -1,10 +1,10 @@
-
-
 CONNECT_ARGS = {
-    'check_same_thread': False
+    'check_same_thread': False,
 }
 
-SQLITE3_PRAGMAS = {
+DB_DRIVER_NAME = 'sqlite+aiosqlite'
+
+PRAGMAS = {
     'journal_mode': 'WAL',
     'synchronous': 'NORMAL',
     'cache_size': -64000,

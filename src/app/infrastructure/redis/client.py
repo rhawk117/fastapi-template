@@ -1,26 +1,23 @@
-from __future__ import annotations
-
+import logging
 from urllib.parse import quote_plus
 
 import redis.asyncio
+from redis.exceptions import AuthenticationError, TimeoutError
 
-from app.core import settings
+from .settings import redis_options, redis_secrets
+
+logger = logging.getLogger(__name__)
 
 
-def create_redis_url(
+def _create_redis_url(
     *,
     host: str,
-    port: int = 6379,
+    port: int,
+    db: int,
     username: str | None = None,
     password: str | None = None,
-    database: int = 0,
     ssl: bool = False,
 ) -> str:
-    """
-    Create a Redis URL with URL encoding for special characters in credentials.
-
-    This version is safer when usernames/passwords contain special characters.
-    """
     scheme = 'rediss' if ssl else 'redis'
 
     auth_part = ''
@@ -28,58 +25,62 @@ def create_redis_url(
         encoded_username = quote_plus(username)
         encoded_password = quote_plus(password)
         auth_part = f'{encoded_username}:{encoded_password}@'
+
     elif password:
         encoded_password = quote_plus(password)
         auth_part = f':{encoded_password}@'
 
-    url = f'{scheme}://{auth_part}{host}:{port}/{database}'
+    url = f'{scheme}://{auth_part}{host}:{port}/{db}'
 
     return url
 
 
-class RedisClient:
-    def __init__(self) -> None:
-        options = settings.get_app_config().redis
-        secrets = settings.get_secret_settings().redis
-        self._url = create_redis_url(
-            host=secrets.host,
-            port=secrets.port,
-            username=secrets.username,
-            password=secrets.password,
-            database=secrets.db,
-        )
-        self._client = redis.asyncio.from_url(
-            self._url,
-            decode_responses=True,
-            **options.model_dump(),
-        )
-
-    async def connect(self) -> None:
-        try:
-            await self._client.ping()
-        except redis.ConnectionError as e:
-            raise RuntimeError('Failed to connect to Redis') from e
-        except redis.TimeoutError as e:
-            raise RuntimeError('Redis connection timed out') from e
-
-    async def disconnect(self) -> None:
-        try:
-            await self._client.close()
-        except redis.ConnectionError as e:
-            raise RuntimeError('Failed to disconnect from Redis') from e
-
-    async def get_client(self) -> redis.asyncio.Redis:
-        """
-        Returns the Redis client instance.
-
-        Raises
-        ------
-        RuntimeError
-            If the Redis client is not connected.
-        """
-        if not self._client:
-            raise RuntimeError('Redis client is not connected.')
-        return self._client
+def _create_redis_client(
+    url: str,
+    *,
+    socket_connect_timeout: float = redis_options.socket_connect_timeout,
+    socket_timeout: float = redis_options.socket_timeout,
+    max_connections: int = redis_options.max_connections,
+    health_check_interval: int = redis_options.health_check_interval,
+) -> redis.asyncio.Redis:
+    return redis.asyncio.from_url(
+        url=url,
+        socket_connect_timeout=socket_connect_timeout,
+        socket_timeout=socket_timeout,
+        max_connections=max_connections,
+        health_check_interval=health_check_interval,
+    )
 
 
-redis_client = RedisClient()
+URL = _create_redis_url(
+    host=redis_secrets.HOST,
+    port=redis_secrets.PORT,
+    db=redis_secrets.DB,
+    username=redis_secrets.USERNAME,
+    password=redis_secrets.PASSORD,
+)
+
+_redis_client = _create_redis_client(url=URL)
+
+
+async def ping_redis_client() -> bool:
+    logger.debug('Pinging Redis server...')
+    success = False
+    try:
+        await _redis_client.ping()
+        success = True
+    except TimeoutError as e:
+        logger.critical(f'Redis ping failed: {e}')
+    except AuthenticationError as e:
+        logger.critical(f'Redis authentication failed: {e}')
+    logger.debug(f'Redis ping successful: {success}')
+    return success
+
+
+async def get_redis_client() -> redis.asyncio.Redis:
+    return _redis_client
+
+
+async def close_redis_connection() -> None:
+    logger.info('Closing Redis connection...')
+    await _redis_client.close()

@@ -1,13 +1,9 @@
-from .setup import (
-    FileLoggerType,
-    configure_file_loggers,
-    configure_logger,
-    get_json_logger,
-)
+from .json_logging import create_json_logger, get_json_logger, get_json_registry
+from .setup import setup_logging
 
 __all__ = [
-    'configure_file_loggers',
-    'configure_logger',
+    'setup_logging',
+    'get_json_registry',
+    'create_json_logger',
     'get_json_logger',
-    'FileLoggerType',
 ]
