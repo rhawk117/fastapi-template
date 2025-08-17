@@ -22,5 +22,6 @@ dependencies = [
     "redis[hiredis]>=6.2.0",
     "sqlalchemy[asyncio]>=2.0.41",
     "structlog>=25.4.0",
+    "toml>=0.10.2",
     "user-agents>=2.2.0",
 ]

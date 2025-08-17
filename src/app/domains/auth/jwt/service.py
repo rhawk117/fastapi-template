@@ -132,9 +132,9 @@ class JwtService:
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
             return None
 
-        return self.try_load_jwt_claim(payload)
+        return self.try_load_claim(payload)
 
-    def try_load_jwt_claim(self, payload: dict) -> JwtClaim | None:
+    def try_load_claim(self, payload: dict) -> JwtClaim | None:
         """
         Attempts to load a JWT claim from the provided payload.
 

@@ -10,7 +10,7 @@ class TokenType(StrEnum):
     REFRESH = 'refresh'
 
 
-class JwtClaim(BaseModel):
+class JwtToken(BaseModel):
     sub: str
     token_type: TokenType
     jti: uuid.UUID = Field(default_factory=uuid.uuid4)
@@ -30,9 +30,3 @@ class JwtClaim(BaseModel):
         return v
 
 
-class AccessTokenClaims(JwtClaim):
-    token_type: TokenType = TokenType.ACCESS
-
-
-class RefreshTokenClaims(JwtClaim):
-    token_type: TokenType = TokenType.REFRESH

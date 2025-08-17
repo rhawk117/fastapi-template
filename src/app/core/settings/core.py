@@ -1,120 +1,79 @@
-from pydantic import Field, SecretStr
-from pydantic_settings import (
-    SettingsConfigDict,
+import functools
+import os
+from typing import Any, Final
+
+from pydantic_settings import BaseSettings
+
+from app.core import path_utils
+
+from ..exceptions import BuildFailedError
+from . import toml_utils
+from .app import AppConfig
+
+TOML_CONFIG_FILE: Final[str] = 'config.toml'
+
+
+@functools.lru_cache
+def get_toml_config_file() -> dict:
+    app_root = path_utils.get_app_root()
+    config_file = app_root / TOML_CONFIG_FILE
+    return toml_utils.read_toml(config_file)
+
+
+def create_toml_settings(settings_class: type[BaseSettings], section_name: str) -> Any:
+    """
+    Create a settings instance from a TOML section.
+
+    Parameters
+    ----------
+    settings_cls : type[TomlSettings]
+    section_name : str
+
+    Returns
+    -------
+    TomlSettings
+    """
+    toml_config = get_toml_config_file()
+    return toml_utils.section_to_settings(
+        settings_cls=settings_class,
+        section_name=section_name,
+        toml_data=toml_config
+    )
+
+
+_app_config: Final[AppConfig] = create_toml_settings(
+    settings_class=AppConfig,
+    section_name='app'
 )
 
-from .settings_cls import Settings, TomlConfigFile
-from .static import (
-    AppSettings,
-    AuthSettings,
-    CrossOriginSettings,
-    RedisOptions,
-    SqlAlchemyOptions,
-)
 
+def load_secret_settings(
+    settings_class: type[BaseSettings],
+    *,
+    testing_fallback_cls: type[BaseSettings] | None = None,
+) -> Any:
+    app_env = _app_config.env_file
 
-class AppConfig(TomlConfigFile):
-    model_config = SettingsConfigDict(toml_file='config.toml')
+    if not app_env or not os.path.exists(app_env):
+        raise BuildFailedError(
+            f'Environment file {app_env} does not exist. '
+            'Please ensure the environment file is present.'
+        )
 
-    app: AppSettings
-    auth: AuthSettings
-    cors: CrossOriginSettings
-    sqlalchemy: SqlAlchemyOptions
-    redis: RedisOptions
+    if testing_fallback_cls and _app_config.testing:
+        return testing_fallback_cls()
 
-
-
-
-class JwtSecrets(Settings):
-    model_config = SettingsConfigDict(secrets_dir='keys')
-
-    PRIVATE_KEY: SecretStr = Field(
-        ...,
-        description='The RSA private key used for signing JWT tokens',
-        alias='private_key.pem',
-    )
-
-    PUBLIC_KEY: SecretStr = Field(
-        ...,
-        description='The RSA public key used for verifying JWT tokens',
-        alias='public_key.pem',
-    )
-
-    PRIVATE_KEY_PASSWORD: SecretStr | None = Field(
-        None,
-        description='Optional password for the private key if it is encrypted',
-        alias='private_key_password',
-    )
-
-    JWT_FINGERPRINT_SECRET: SecretStr = Field(
-        ...,
-        description='Secret used for JWT fingerprinting',
-        alias='jwt_fingerprint'
+    return settings_class(
+        _env_file=app_env,
     )
 
 
+def get_app_settings() -> AppConfig:
+    """
+    Get the application settings.
 
-
-
-class SecuritySettings(Settings):
-    SECRET_KEY: str
-    ENCRYPTION_KEY: str
-    ENCRYPTION_SALT: str
-
-    JWT_FINGERPRINT_SECRET: str = Field(
-        ...,
-        description='Secret used for JWT fingerprinting',
-    )
-
-    JWT_ALGORITHM: str = Field(
-        ...,
-        description='Algorithm used for signing JWT tokens',
-    )
-
-
-
-
-# class SecretSettings(_EnvSettings):
-#     """
-#     Environment variable secrets
-#     """
-
-#     SECRET_KEY: str
-
-#     ENCRYPTION_KEY: str
-#     ENCRYPTION_SALT: str
-
-#     JWT_ALGORITHM: Literal['HS256', 'RS256']
-#     JWT_FINGERPRINT_SECRET: str
-
-#     PRIVATE_KEY_PASSWORD: str | None = None
-#     PRIVATE_KEY_FILE: str
-#     PUBLIC_KEY_FILE: str
-#     BCRYPT_PEPPER: str | None = None
-
-#     DATABASE_URL: str
-
-#     REDIS_HOST: str = 'localhost'
-
-#     REDIS_PASSWORD: str | None = None
-#     REDIS_USERNAME: str | None = None
-
-#     REDIS_PORT: int = 6379
-#     REDIS_DB: int = 0
-
-#     @property
-#     def __keys_dir(self) -> Path:
-#         root = Path(__file__).parent.parent.parent.resolve()
-#         return root / 'keys'
-
-#     def private_key_path(self) -> Path:
-#         return self.__keys_dir / self.PRIVATE_KEY_FILE
-
-#     def public_key_path(self) -> Path:
-#         return self.__keys_dir / self.PUBLIC_KEY_FILE
-
-#     @property
-#     def private_key_password(self) -> bytes | None:
-#         if self.PRIVATE_KEY_PASSWORD:
-#             return self.PRIVATE_KEY_PASSWORD.encode('utf-8')
-#         return None
+    Returns
+    -------
+    AppConfig
+    """
+    return _app_config
