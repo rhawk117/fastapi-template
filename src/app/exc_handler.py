@@ -1,12 +1,12 @@
 import traceback
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import HTTPException, status
 from fastapi.exceptions import RequestValidationError
 from starlette.requests import Request
 
 from app.adapters import log
-from app.api.exceptions.model import HttpErrorModel, HttpValidationErrorModel
 from app.api.response_class import MsgspecJSONResponse
+from app.exceptions.model import HttpErrorModel, HttpValidationErrorModel
 
 
 class HttpErrorHandler:

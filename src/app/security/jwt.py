@@ -3,26 +3,27 @@
 
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import NamedTuple, TypedDict
+from typing import Self, TypedDict
 
 from jose import jwt
 from jose.exceptions import JWTError
+from msgspec import field
 
 from app.core import settings
 
 
-class JwtClaim(TypedDict):
+class JwtParams(TypedDict):
     iss: str # issuer
     aud: str | list[str]  # audience
     sub: str # subject (user id)
     exp: int # expiration (unix seconds)
     iat: int # issued-at (unix seconds)
-    nbf: int # not-before (unix seconds)
-    jti: str # unique token id
+    nbf: int  # not-before (unix seconds)
+    jti: str  # unique token id
     token_type: str
-    scopes: list[str] | None
 
 
 def utc_now() -> datetime:
@@ -54,11 +55,11 @@ def generate_jti() -> str:
     return str(uuid.uuid4())
 
 
-def create_jwt_claim(
+def _jwt_parameterize(
     sub: str,
+    iat: int,
     token_type: TokenType,
-    scopes: list[str] | None = None,
-) -> JwtClaim:
+) -> JwtParams:
     '''
     Creates a JWT claim with the given subject, token type, and optional scopes.
 
@@ -73,41 +74,37 @@ def create_jwt_claim(
     JwtClaim
     '''
     config = settings.get_app_settings().jwt
-    now = utc_now()
-    issued_at = int(now.timestamp())
     exp_modifier = get_token_type_ttl(token_type, config=config)
 
-    duration = now + timedelta(seconds=exp_modifier)
-    expires = int(duration.timestamp())
+    exp = iat + exp_modifier
 
-    return JwtClaim(
+    return JwtParams(
         iss=config.ISSUER,
         aud=config.AUDIENCE,
         sub=sub,
-        exp=expires,
-        iat=issued_at,
-        nbf=issued_at,
+        exp=exp,
+        iat=iat,
+        nbf=iat,
         jti=generate_jti(),
         token_type=token_type.value,
-        scopes=scopes or [],
     )
 
 
-class JwtToken(NamedTuple):
-    '''
-    Typed tuple representing an encoded JWT token and
-    its payload.
-    '''
-    token: str
-    payload: dict
 
-def encode_jwt_claim(
-    base_claim: JwtClaim,
+
+def generate_sid() -> str:
+    """
+    Generates a new session ID.
+    """
+    return uuid.uuid4().hex
+
+
+def encode_payload(
+    base_claim: dict,
     *,
-    extras: dict | None = None,
     headers: dict | None = None,
-) -> JwtToken:
-    '''
+) -> str:
+    """
     Given a base JWT claim, it will then be encoded into a
     JWT token.
 
@@ -120,29 +117,21 @@ def encode_jwt_claim(
     Returns
     -------
     JwtToken
-    '''
+    """
     config = settings.get_app_settings()
 
     claim: dict = dict(base_claim.copy())
-    if extras:
-        claim.update(extras)
 
     _private_key = config.rs256.PRIVATE_KEY.get_secret_value()
-
-    encoded_token = jwt.encode(
+    return jwt.encode(
         claim,
         key=_private_key,
         algorithm=config.jwt.ALGORITHM,
         headers=headers or {},
     )
 
-    return JwtToken(
-        token=encoded_token,
-        payload=claim,
-    )
-
 def decode_jwt_token(token: str) -> dict | None:
-    '''
+    """
     Decodes a JWT token and verifies its claims, returns None if verification fails
 
     Parameters
@@ -156,7 +145,7 @@ def decode_jwt_token(token: str) -> dict | None:
     -------
     dict | None
         _description_
-    '''
+    """
     config = settings.get_app_settings()
     public_key = config.rs256.PUBLIC_KEY.get_secret_value()
     try:
@@ -167,22 +156,25 @@ def decode_jwt_token(token: str) -> dict | None:
             audience=config.jwt.AUDIENCE,
             issuer=config.jwt.ISSUER,
             options={
-                "verify_signature": True,
-                "verify_exp": True,
-                "verify_nbf": True,
-                "verify_iat": True,
-                "verify_aud": True,
-                "require_exp": True,
-                "require_iat": True,
-                "require_nbf": True,
+                'verify_signature': True,
+                'verify_exp': True,
+                'verify_nbf': True,
+                'verify_iat': True,
+                'verify_aud': True,
+                'require_exp': True,
+                'require_iat': True,
+                'require_nbf': True,
                 # "leeway": self.settings.leeway_seconds,
-            }
+            },
         )
     except JWTError:
         return None
 
-
     return claim_payload
+
+
+
+
 
 def validate_jwt_claim(
     claim_payload: dict | None,

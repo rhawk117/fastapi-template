@@ -1,7 +1,7 @@
 from collections.abc import Mapping
-from typing import Any, Generic, TypedDict, TypeVar
+from dataclasses import dataclass
+from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel
 from sqlalchemy import Result, ScalarResult, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.selectable import TypedReturnsRows
@@ -9,12 +9,19 @@ from sqlalchemy.sql.selectable import TypedReturnsRows
 M = TypeVar('M')
 # S = TypeVar('S', bound=BaseModel)
 
-
-class SqlPageResult(TypedDict, Generic[M]):
-    models: list[M]
+@dataclass(slots=True)
+class SqlPage:
+    models: list[dict]
     total: int
     page: int
     page_size: int
+
+    def convert_models(self, model_class: type[M]) -> list[M]:
+        """
+        Convert the models to instances of the specified model class.
+        """
+        return [model_class(**model) for model in self.models]
+
 
 
 class SqlRepository(Generic[M]):
@@ -70,8 +77,22 @@ class SqlRepository(Generic[M]):
         return result.scalars().first()
 
     async def sync(
-        self, *, commit: bool = True, flush: bool = False, refresh: bool = False
+        self,
+        *,
+        commit: bool = True,
+        flush: bool = False,
+        refresh: bool = False
     ) -> None:
+        '''
+        Syncs the session with the database.
+
+        Parameters
+        ----------
+        commit : bool, optional
+        flush : bool, optional
+        refresh : bool, optional
+        '''
+
         if flush:
             await self._session.flush()
 
@@ -132,29 +153,16 @@ class SqlRepository(Generic[M]):
         result = await self._session.execute(paginated_query)
         return result, total
 
+
     async def paginate(
         self,
         statement: Select,
         page: int = 1,
         page_size: int = 10,
-    ) -> SqlPageResult[M]:
-        result, total = await self._execute_paginated(statement, page, page_size)
-        return SqlPageResult(
-            models=list(result.scalars().all()) or [],
-            total=total,
-            page=page,
-            page_size=page_size,
-        )
-
-    async def paginate_mappings(
-        self,
-        statement: Select,
-        page: int = 1,
-        page_size: int = 10,
-    ) -> SqlPageResult[Mapping[str, Any]]:
+    ) -> SqlPage:
         result, total = await self._execute_paginated(statement, page, page_size)
 
-        return SqlPageResult(
+        return SqlPage(
             models=[dict(row) for row in result.mappings().all()],
             total=total,
             page=page,
