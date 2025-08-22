@@ -1,0 +1,24 @@
+
+title: 'FastAPI Template'
+version: '0.1.0'
+description: 'A template for FastAPI projects with a focus on best practices.'
+summary: 'API documentation for the FastAPI Template project.'
+
+terms_of_service: 'https://example.com/terms'
+redirect_slashes: true
+root_path: ''
+root_path_in_servers: false
+
+contact:
+  name: 'Support Team'
+  url: 'https://example.com/support'
+  email: 'example@example.com'
+
+license:
+  name: 'MIT License'
+  url: 'https://opensource.org/license/mit/'
+
+docs:
+  openapi: '/openapi.json'
+  redoc: '/redoc'
+  swagger: '/docs'

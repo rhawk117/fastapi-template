@@ -3,20 +3,19 @@ from typing import Self
 from fastapi.exceptions import RequestValidationError
 from pydantic import Field, ValidationError
 
-from app.core.pydantic import CustomBaseModel, FieldDetails, parse_validation_error
+from app.core.schema import PydanticSchema
+from app.utils.validation_errors import FieldDetails, parse_validation_error
 
 
-class HttpErrorModel(CustomBaseModel):
+class HttpErrorModel(PydanticSchema):
     message: str = Field(
         'Oops! Something went wrong.', description='A message describing the error'
     )
-
     success: bool = False
-
     extra: dict | None = None
 
 
-class HttpValidationErrorModel(CustomBaseModel):
+class HttpValidationErrorModel(PydanticSchema):
     message: str = Field(
         'Invalid request parameters.',
         description='A message describing the validation error',

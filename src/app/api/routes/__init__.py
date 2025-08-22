@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status
 
-from ..openapi_extra import HTTPError, SchemaError, create_operation_id
+from ...utils.openapi_extra import HTTPError, SchemaError, create_operation_id
 from .users import users_router
 
 api_router = APIRouter(

@@ -11,8 +11,8 @@ from app.domains.users.schemas import (
 )
 
 from ..annotations import PathUUID
-from ..depends import UserServiceDepends
-from ..openapi_extra import HTTPError
+from ..deps import UserServiceDepends
+from ...utils.openapi_extra import HTTPError
 
 users_router = APIRouter()
 
